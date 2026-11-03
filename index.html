@@ -1093,7 +1093,7 @@ function openTaskModal(id){
       <div class="field"><label>进度</label><div class="range-wrap"><input type="range" id="f-prog" min="0" max="100" step="5" value="${t?t.progress:0}"><output id="f-prog-out">${t?t.progress:0}%</output></div></div>
       <div class="field"><label>系列</label><select class="select" id="f-series">${seriesOptions(t?t.seriesId:'')}</select></div>
       <div class="field"><label>备注 <span class="hint">可选</span></label><textarea class="textarea" id="f-note" style="min-height:60px" placeholder="阶段目标、依赖、注意事项…">${t?esc(t.note||''):''}</textarea></div>
-      <div class="modal-foot"><button class="btn ghost" onclick="closeModal()">取消</button><button class="btn" onclick="saveTask('${id||''}')">保存</button></div>
+      <div class="modal-foot">${id?'<button class="btn danger" style="margin-right:auto" onclick="delTask(\''+id+'\')">'+ICONS.del+'删除</button>':''}<button class="btn ghost" onclick="closeModal()">取消</button><button class="btn" onclick="saveTask('${id||''}')">保存</button></div>
     </div>
   </div>`);
   const prog=$('#f-prog');if(prog)prog.addEventListener('input',()=>{$('#f-prog-out').textContent=prog.value+'%';});
