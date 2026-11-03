@@ -210,6 +210,22 @@ svg{display:block}
 }
 .note-src svg{width:12px;height:12px;flex:0 0 12px}
 .note-src:hover{text-decoration:underline}
+.cards.vertical{grid-template-columns:1fr!important}
+.filter-select{width:auto;min-width:132px;font-size:13px;padding:7px 10px}
+.md-content{font-size:14px;line-height:1.75;word-break:break-word;white-space:normal}
+.md-content h1,.md-content h2,.md-content h3,.md-content h4{font-size:1.12em;font-weight:700;margin:.85em 0 .35em;color:var(--ink)}
+.md-content p{margin:.3em 0}
+.md-content ul,.md-content ol{margin:.3em 0;padding-left:1.45em}
+.md-content li{margin:.12em 0}
+.md-content blockquote{margin:.5em 0;padding:.25em .9em;border-left:3px solid var(--accent);color:var(--muted);background:var(--hover-bg);border-radius:0 8px 8px 0}
+.md-content code{font-family:var(--mono);font-size:.88em;background:var(--hover-bg);border:1px solid var(--line);border-radius:4px;padding:0 .35em}
+.md-content pre{background:var(--hover-bg);border:1px solid var(--line);border-radius:9px;padding:10px 12px;overflow-x:auto;margin:.5em 0}
+.md-content pre code{background:none;border:none;padding:0}
+.md-content table{border-collapse:collapse;margin:.5em 0;width:100%;font-size:13.5px}
+.md-content th,.md-content td{border:1px solid var(--line-strong);padding:6px 10px;text-align:left}
+.md-content th{background:var(--hover-bg);font-weight:600}
+.md-content hr{border:none;border-top:1px solid var(--line-strong);margin:.8em 0}
+.md-content a{color:var(--sky)}
 .dot{width:8px;height:8px;border-radius:50%;display:inline-block;flex:0 0 8px}
 .pill{font-size:11px;font-weight:600;padding:1px 8px;border-radius:20px;line-height:18px}
 .pill.done{background:var(--accent-soft);color:var(--accent-deep)}
@@ -441,6 +457,55 @@ const $=(s,el=document)=>el.querySelector(s);
 const $$=(s,el=document)=>[...el.querySelectorAll(s)];
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,8);
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function mdUrl(u){u=String(u||'').trim();return /^(https?:|mailto:|#|\/)/i.test(u)?esc(u):'#';}
+function md(src){
+  if(!src)return '';
+  let s=esc(src).replace(/^&gt;\s?/gm,'> ');
+  /* 行内语法（在转义之后处理，保证无 XSS） */
+  s=s.replace(/`([^`\n]+)`/g,'<code>$1</code>');
+  s=s.replace(/\*\*([^*\n]+)\*\*/g,'<strong>$1</strong>');
+  s=s.replace(/~~([^~\n]+)~~/g,'<del>$1</del>');
+  s=s.replace(/\*([^*\n]+)\*/g,'<em>$1</em>');
+  s=s.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g,(m,t,u)=>'<a href="'+mdUrl(u)+'" target="_blank" rel="noopener">'+t+'</a>');
+  /* 块级语法 */
+  const lines=s.split('\n');
+  const out=[];let list=null,inCode=false,codeBuf=[],para=[];
+  const flushPara=()=>{if(para.length){out.push('<p>'+para.join('<br>')+'</p>');para=[];}};
+  const flushList=()=>{if(list){out.push(list==='ul'?'</ul>':'</ol>');list=null;}};
+  for(let i=0;i<lines.length;i++){
+    const line=lines[i];
+    if(inCode){
+      if(/^```/.test(line)){inCode=false;out.push('<pre><code>'+codeBuf.join('\n')+'</code></pre>');codeBuf=[];}
+      else codeBuf.push(line);
+      continue;
+    }
+    if(/^```/.test(line)){flushPara();flushList();inCode=true;codeBuf=[];continue;}
+    if(/^#{1,6}\s/.test(line)){flushPara();flushList();const lv=line.match(/^(#{1,6})\s/)[1].length;out.push('<h'+lv+'>'+line.replace(/^#{1,6}\s/,'')+'</h'+lv+'>');continue;}
+    if(/^\s*[-*]\s/.test(line)){flushPara();if(list!=='ul'){flushList();out.push('<ul>');list='ul';}out.push('<li>'+line.replace(/^\s*[-*]\s/,'')+'</li>');continue;}
+    if(/^\s*\d+\.\s/.test(line)){flushPara();if(list!=='ol'){flushList();out.push('<ol>');list='ol';}out.push('<li>'+line.replace(/^\s*\d+\.\s/,'')+'</li>');continue;}
+    if(/^>\s?/.test(line)){flushPara();flushList();out.push('<blockquote>'+line.replace(/^>\s?/,'')+'</blockquote>');continue;}
+    if(/^\s*---+\s*$/.test(line)){flushPara();flushList();out.push('<hr>');continue;}
+    if(/^\|.*\|$/.test(line)){
+      flushPara();flushList();
+      const rows=[line];let j=i+1;
+      while(j<lines.length&&/^\|.*\|$/.test(lines[j])){rows.push(lines[j]);j++;}
+      i=j-1;
+      const dataRows=rows.filter(r=>!/^\|[\s:|-]+\|$/.test(r));
+      if(dataRows.length>=1){
+        const split=r=>r.replace(/^\||\|$/g,'').split('|').map(c=>c.trim());
+        let h='<table><thead><tr>'+split(dataRows[0]).map(c=>'<th>'+c+'</th>').join('')+'</tr></thead><tbody>';
+        for(let k=1;k<dataRows.length;k++)h+='<tr>'+split(dataRows[k]).map(c=>'<td>'+c+'</td>').join('')+'</tr>';
+        out.push(h+'</tbody></table>');
+      }
+      continue;
+    }
+    if(/^\s*$/.test(line)){flushPara();flushList();continue;}
+    para.push(line);
+  }
+  if(inCode)out.push('<pre><code>'+codeBuf.join('\n')+'</code></pre>');
+  flushPara();flushList();
+  return out.join('\n');
+}
 const D=86400000;
 function fmtDate(ts){const d=new Date(ts);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
 function todayStr(){return fmtDate(Date.now());}
@@ -490,14 +555,14 @@ function seedData(){
       {id:s3,name:'工作备忘',desc:'工作中值得沉淀的做法与素材',color:SERIES_COLORS[3],createdAt:now-25*D}
     ],
     ideas:[
-      {id:uid(),title:'把甘特图倒计时做成小组件',content:'做一个可嵌入个人主页的迷你组件：显示最近一个里程碑还剩多少天，用环形进度 + 渐变配色。',tags:['前端','灵感'],seriesId:s1,done:false,importance:1,createdAt:now-2*D,updatedAt:now-2*D},
+      {id:uid(),title:'把甘特图倒计时做成小组件',content:'做一个可嵌入个人主页的**迷你组件**：\n\n- 显示最近一个里程碑还剩多少天\n- 用环形进度 + 渐变配色\n- 数据通过 `iframe` 或 API 暴露',tags:['前端','灵感'],seriesId:s1,done:false,importance:1,createdAt:now-2*D,updatedAt:now-2*D},
       {id:uid(),title:'周报自动摘要工具',content:'读取一周的 git 提交与飞书消息，自动生成要点式周报草稿，减少重复劳动。',tags:['效率','自动化'],seriesId:s3,done:false,importance:2,createdAt:now-1*D,updatedAt:now-3600e3},
-      {id:uid(),title:'用卡片笔记法重读《人月神话》',content:'每章提炼一张卡片，不追求读完，只追求每章有一个能用的结论。',tags:['读书'],seriesId:s2,done:true,importance:0,createdAt:now-6*D,updatedAt:now-5*D}
+      {id:uid(),title:'用卡片笔记法重读《人月神话》',content:'> 每章提炼一张卡片，不追求读完，只追求每章有一个能用的结论。\n\n推荐先读 [英文版](https://en.wikipedia.org/wiki/The_Mythical_Man-Month)。',tags:['读书'],seriesId:s2,done:true,importance:0,createdAt:now-6*D,updatedAt:now-5*D}
     ],
     notes:[
-      {id:uid(),title:'甘特图绘制要点',content:'1. 时间轴刻度对齐任务条起点，避免像素级错位；\n2. 今天线用红色竖线强调；\n3. 按系列着色，图例放在底部；\n4. 移动端横向滚动，任务名列固定。',url:'https://developer.mozilla.org/zh-CN/docs/Web/CSS/grid',seriesId:s1,pinned:true,createdAt:now-8*D,updatedAt:now-3*D},
-      {id:uid(),title:'卡片笔记法三条规则',content:'只记自己的话，不抄原文；\n每张卡片只表达一个观点；\n新笔记必须连接到旧笔记。',url:'',seriesId:s2,pinned:false,createdAt:now-10*D,updatedAt:now-4*D},
-      {id:uid(),title:'发布前检查清单',content:'资源路径是否相对路径；\n移动端 375px 是否可用；\n空状态与错误提示是否齐全。',url:'',seriesId:s3,pinned:false,createdAt:now-5*D,updatedAt:now-5*D}
+      {id:uid(),title:'甘特图绘制要点',content:'- **对齐**：时间轴刻度与任务条起点像素级对齐\n- **今天线**：用红色竖线强调当前日期\n- **着色**：按系列着色，图例放底部\n- **移动端**：横向滚动，任务名列固定',url:'https://developer.mozilla.org/zh-CN/docs/Web/CSS/grid',seriesId:s1,pinned:true,createdAt:now-8*D,updatedAt:now-3*D},
+      {id:uid(),title:'卡片笔记法三条规则',content:'1. 只记自己的话，不抄原文\n2. 每张卡片只表达一个观点\n3. 新笔记必须连接到旧笔记',url:'',seriesId:s2,pinned:false,createdAt:now-10*D,updatedAt:now-4*D},
+      {id:uid(),title:'发布前检查清单',content:'| 检查项 | 说明 |\n| --- | --- |\n| 资源路径 | 使用相对路径 |\n| 移动端 | 375px 可用 |\n| 空状态 | 错误提示齐全 |',url:'',seriesId:s3,pinned:false,createdAt:now-5*D,updatedAt:now-5*D}
     ],
     webnotes:[
       {id:uid(),url:'https://developer.mozilla.org/zh-CN/docs/Web/API',title:'MDN Web API 索引',excerpt:'前端 API 权威参考，查兼容性首选。',seriesId:s2,createdAt:now-12*D},
@@ -559,7 +624,16 @@ function openModal(html){
   const f=$('#modal-mask input,#modal-mask textarea');if(f)setTimeout(()=>f.focus(),50);
 }
 function closeModal(){const r=$('#modal-root');if(r)r.innerHTML='';}
-function confirmBox(msg){return window.confirm(msg);}
+function confirmDialog(msg,onOk){
+  openModal(`<div class="modal" style="max-width:400px">
+    <div class="modal-head"><h3>确认操作</h3><button class="icon-btn" onclick="closeModal()">${ICONS.del}</button></div>
+    <div class="modal-body">
+      <div style="font-size:14px;color:var(--ink-2);line-height:1.7">${esc(msg)}</div>
+      <div class="modal-foot"><button class="btn ghost" onclick="closeModal()">取消</button><button class="btn" id="cf-ok">确认</button></div>
+    </div>
+  </div>`);
+  $('#cf-ok').addEventListener('click',()=>{closeModal();onOk();});
+}
 function seriesOptions(selId){
   let h='<option value="">无系列</option>';
   state.series.forEach(s=>{h+='<option value="'+s.id+'"'+(s.id===selId?' selected':'')+'>'+esc(s.name)+'</option>';});
@@ -730,7 +804,7 @@ function viewIdeas(){
       ${tags.map(t=>`<button class="chip ${ideaFilter===t?'on':''}" onclick="ideaFilter='${t}';render()">${esc(t)}<span class="cnt">${state.ideas.filter(i=>i.tags.includes(t)).length}</span></button>`).join('')}
     </div>
   </div>
-  ${list.length?`<div class="cards">${list.map(ideaCard).join('')}</div>`:emptyBox('这里还没有灵感','点击右上角「新建灵感」记录第一个想法，可以打标签、归入系列。','#/ideas','去记录')}`;
+  ${list.length?`<div class="cards vertical">${list.map(ideaCard).join('')}</div>`:emptyBox('这里还没有灵感','点击右上角「新建灵感」记录第一个想法，可以打标签、归入系列。','#/ideas','去记录')}`;
 }
 function ideaCard(i){
   const s=seriesById(i.seriesId);
@@ -740,7 +814,7 @@ function ideaCard(i){
     <div class="body">
       <div class="title"><span class="t">${esc(i.title)}</span>${imp}${i.done?'<span class="pill done">已完成</span>':''}</div>
       <div class="meta">${relTime(i.updatedAt||i.createdAt)}${entryMeta({ref:i})}${i.tags.map(t=>'<span class="tag">'+esc(t)+'</span>').join('')}</div>
-      ${i.content?'<div class="content clamp">'+esc(i.content)+'</div>':''}
+      ${i.content?'<div class="content md-content">'+md(i.content)+'</div>':''}
     </div>
     <div class="actions">
       <button class="icon-btn" title="标记完成" onclick="toggleIdea('${i.id}')">${i.done?ICONS.ring:ICONS.check}</button>
@@ -783,19 +857,25 @@ function saveIdea(id){
   save();closeModal();render();toast(id?'灵感已更新':'灵感已记录');
 }
 function toggleIdea(id){const i=state.ideas.find(x=>x.id===id);i.done=!i.done;i.updatedAt=Date.now();save();render();}
-function delIdea(id){if(!confirmBox('删除这条灵感？'))return;state.ideas=state.ideas.filter(x=>x.id!==id);save();render();toast('已删除');}
+function delIdea(id){confirmDialog('删除这条灵感？',()=>{state.ideas=state.ideas.filter(x=>x.id!==id);save();render();toast('已删除');});}
 function fv(id){return $('#'+id).value.trim();}
 
 /* ===== 笔记视图 ===== */
+let noteSeriesFilter='';
 function viewNotes(){
-  const list=state.notes.slice().sort((a,b)=>(b.pinned-a.pinned)||(b.updatedAt-a.updatedAt));
+  let list=state.notes.slice().sort((a,b)=>(b.pinned-a.pinned)||(b.updatedAt-a.updatedAt));
+  if(noteSeriesFilter)list=list.filter(n=>n.seriesId===noteSeriesFilter);
   return `
   <div class="toolbar">
     <button class="btn" onclick="openNoteModal()">${ICONS.plus}新建笔记</button>
     <div class="spacer"></div>
+    <select class="select filter-select" onchange="noteSeriesFilter=this.value;render()">
+      <option value="">全部系列</option>
+      ${state.series.map(s=>'<option value="'+s.id+'"'+(noteSeriesFilter===s.id?' selected':'')+'>'+esc(s.name)+'</option>').join('')}
+    </select>
     <button class="btn ghost sm" onclick="navigate('#/search')">${ICONS.search}搜索</button>
   </div>
-  ${list.length?`<div class="cards">${list.map(noteCard).join('')}</div>`:emptyBox('还没有笔记','写一篇长一点的笔记，把想法沉淀下来，可以置顶或归入系列。','#/notes','去记录')}`;
+  ${list.length?`<div class="cards vertical">${list.map(noteCard).join('')}</div>`:emptyBox('还没有笔记','写一篇长一点的笔记，把想法沉淀下来，可以置顶或归入系列。','#/notes','去记录')}`;
 }
 function noteCard(n){
   const s=seriesById(n.seriesId);
@@ -804,7 +884,7 @@ function noteCard(n){
     <div class="body">
       <div class="title"><span class="t">${esc(n.title)}</span>${n.pinned?'<span class="pill" style="background:var(--amber-soft);color:#8A5F15">置顶</span>':''}</div>
       <div class="meta">${relTime(n.updatedAt||n.createdAt)}${entryMeta({ref:n})}${n.url?'<span class="note-src" title="'+esc(n.url)+'" onclick="event.stopPropagation();window.open(\''+esc(n.url)+'\',\'_blank\')">'+ICONS.link+'<span style="overflow:hidden;text-overflow:ellipsis">'+esc(n.url.replace(/^https?:\/\//,''))+'</span></span>':''}</div>
-      ${n.content?'<div class="content clamp">'+esc(n.content)+'</div>':''}
+      ${n.content?'<div class="content md-content">'+md(n.content)+'</div>':''}
     </div>
     <div class="actions">
       <button class="icon-btn" title="置顶" onclick="event.stopPropagation();togglePin('${n.id}')">${ICONS.pin}</button>
@@ -844,20 +924,26 @@ function openNoteDetail(id){
     <div class="modal-head"><h3>${esc(n.title)}</h3><button class="icon-btn" onclick="closeModal()">${ICONS.del}</button></div>
     <div class="modal-body">
       <div class="meta" style="margin-bottom:14px;font-size:12px;color:var(--muted);display:flex;gap:10px;flex-wrap:wrap;align-items:center">${relTime(n.updatedAt||n.createdAt)}${s?'<span><i class="dot" style="background:'+s.color+'"></i> '+esc(s.name)+'</span>':''}${n.url?'<a href="'+esc(n.url)+'" target="_blank" rel="noopener" style="color:var(--sky);display:inline-flex;align-items:center;gap:5px;max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+ICONS.link+esc(n.url)+'</a>':''}</div>
-      <div style="white-space:pre-wrap;font-size:14.5px;line-height:1.8">${esc(n.content)}</div>
+      <div style="font-size:14.5px;line-height:1.8" class="md-content">${md(n.content)}</div>
       <div class="modal-foot" style="margin-top:18px"><button class="btn ghost" onclick="closeModal()">关闭</button><button class="btn" onclick="closeModal();openNoteModal('${n.id}')">编辑</button></div>
     </div>
   </div>`);
 }
 function togglePin(id){const n=state.notes.find(x=>x.id===id);n.pinned=!n.pinned;n.updatedAt=Date.now();save();render();}
-function delNote(id){if(!confirmBox('删除这篇笔记？'))return;state.notes=state.notes.filter(x=>x.id!==id);save();render();toast('已删除');}
-/* ===== 网站笔记视图 ===== */
+function delNote(id){confirmDialog('删除这篇笔记？',()=>{state.notes=state.notes.filter(x=>x.id!==id);save();render();toast('已删除');});}
+/* ===== 书签视图 ===== */
+let webSeriesFilter='';
 function viewWebnotes(){
-  const list=state.webnotes.slice().sort((a,b)=>b.createdAt-a.createdAt);
+  let list=state.webnotes.slice().sort((a,b)=>b.createdAt-a.createdAt);
+  if(webSeriesFilter)list=list.filter(w=>w.seriesId===webSeriesFilter);
   return `
   <div class="toolbar">
     <button class="btn" onclick="openWebModal()">${ICONS.plus}收藏网址</button>
     <div class="spacer"></div>
+    <select class="select filter-select" onchange="webSeriesFilter=this.value;render()">
+      <option value="">全部系列</option>
+      ${state.series.map(s=>'<option value="'+s.id+'"'+(webSeriesFilter===s.id?' selected':'')+'>'+esc(s.name)+'</option>').join('')}
+    </select>
     <button class="btn ghost sm" onclick="navigate('#/search')">${ICONS.search}搜索</button>
   </div>
   ${list.length?`<div class="cards">${list.map(webCard).join('')}</div>`:emptyBox('还没有书签','把通篇都有用的文章、工具站网址收藏进来，点击标题即可打开原文。','#/webnotes','去收藏')}`;
@@ -901,7 +987,7 @@ function saveWeb(id){
   else{state.webnotes.unshift({id:uid(),url,title,excerpt:fv('f-excerpt'),seriesId:fv('f-series')||null,createdAt:Date.now()});}
   save();closeModal();render();toast(id?'网站笔记已更新':'已收藏');
 }
-function delWeb(id){if(!confirmBox('删除这条网站笔记？'))return;state.webnotes=state.webnotes.filter(x=>x.id!==id);save();render();toast('已删除');}
+function delWeb(id){confirmDialog('删除这条网站笔记？',()=>{state.webnotes=state.webnotes.filter(x=>x.id!==id);save();render();toast('已删除');});}
 
 /* ===== 甘特图倒计时视图 ===== */
 let ganttZoom='day';
@@ -1022,7 +1108,7 @@ function saveTask(id){
   else{state.tasks.push({id:uid(),name,start,end,progress,seriesId:fv('f-series')||null,note:fv('f-note'),createdAt:Date.now()});}
   save();closeModal();render();toast(id?'任务已更新':'任务已创建');
 }
-function delTask(id){if(!confirmBox('删除这个任务？'))return;state.tasks=state.tasks.filter(x=>x.id!==id);save();render();toast('已删除');}
+function delTask(id){confirmDialog('删除这个任务？',()=>{state.tasks=state.tasks.filter(x=>x.id!==id);save();render();toast('已删除');});}
 
 /* ===== 系列视图 ===== */
 function viewSeries(){
@@ -1078,13 +1164,16 @@ function saveSeries(id){
 }
 function delSeries(id){
   const cnt=seriesCount(id);
-  if(cnt>0&&!confirmBox('删除该系列会同时解除其中 '+cnt+' 条内容的归属（内容本身不会被删除）。继续？'))return;
-  state.series=state.series.filter(s=>s.id!==id);
-  state.ideas.forEach(i=>{if(i.seriesId===id)i.seriesId=null;});
-  state.notes.forEach(n=>{if(n.seriesId===id)n.seriesId=null;});
-  state.webnotes.forEach(w=>{if(w.seriesId===id)w.seriesId=null;});
-  state.tasks.forEach(t=>{if(t.seriesId===id)t.seriesId=null;});
-  save();render();toast('系列已删除');
+  const doDel=()=>{
+    state.series=state.series.filter(s=>s.id!==id);
+    state.ideas.forEach(i=>{if(i.seriesId===id)i.seriesId=null;});
+    state.notes.forEach(n=>{if(n.seriesId===id)n.seriesId=null;});
+    state.webnotes.forEach(w=>{if(w.seriesId===id)w.seriesId=null;});
+    state.tasks.forEach(t=>{if(t.seriesId===id)t.seriesId=null;});
+    save();render();toast('系列已删除');
+  };
+  if(cnt>0){confirmDialog('删除该系列会同时解除其中 '+cnt+' 条内容的归属（内容本身不会被删除）。继续？',doDel);return;}
+  doDel();
 }
 function viewSeriesDetail(id){
   const s=seriesById(id);if(!s){return '<div class="empty">系列不存在</div>';}
@@ -1092,7 +1181,7 @@ function viewSeriesDetail(id){
   const notes=state.notes.filter(n=>n.seriesId===id);
   const webs=state.webnotes.filter(w=>w.seriesId===id);
   const tasks=state.tasks.filter(t=>t.seriesId===id);
-  const group=(title,icon,arr,fn)=>arr.length?`<div class="section"><div class="section-head"><h2>${icon} ${title}<span style="font-size:12px;color:var(--muted);font-weight:400">${arr.length}</span></h2></div><div class="cards">${arr.map(fn).join('')}</div></div>`:'';
+  const group=(title,icon,arr,fn,vertical)=>arr.length?`<div class="section"><div class="section-head"><h2>${icon} ${title}<span style="font-size:12px;color:var(--muted);font-weight:400">${arr.length}</span></h2></div><div class="cards${vertical?' vertical':''}">${arr.map(fn).join('')}</div></div>`:'';
   return `<div class="toolbar">
     <button class="btn ghost sm" onclick="navigate('#/series')">← 全部系列</button>
     <div class="spacer"></div>
@@ -1108,8 +1197,8 @@ function viewSeriesDetail(id){
       </div>
     </div>
   </div>
-  ${group('灵感',ICONS.idea,ideas,i=>ideaCard(i))}
-  ${group('笔记',ICONS.note,notes,n=>noteCard(n))}
+  ${group('灵感',ICONS.idea,ideas,i=>ideaCard(i),true)}
+  ${group('笔记',ICONS.note,notes,n=>noteCard(n),true)}
   ${group('书签',ICONS.web,webs,w=>webCard(w))}
   ${group('任务',ICONS.task,tasks,t=>taskRow(t))}
   ${!ideas.length&&!notes.length&&!webs.length&&!tasks.length?emptyBox('这个系列还没有内容','从任意页面新建内容时选择「'+esc(s.name)+'」，就会汇总到这里。','#/ideas','去记录'):''}`;
@@ -1192,8 +1281,7 @@ function initEvents(){
   $('#btn-export').addEventListener('click',exportData);
   $('#btn-import').addEventListener('click',()=>$('#file-import').click());
   $('#btn-reset').addEventListener('click',()=>{
-    if(!confirmBox('将清空当前全部数据并恢复为示例数据，确定？'))return;
-    state=seedData();save();render();toast('已恢复示例数据');
+    confirmDialog('将清空当前全部数据并恢复为示例数据，确定？',()=>{state=seedData();save();render();toast('已恢复示例数据');});
   });
   const fi=document.createElement('input');
   fi.type='file';fi.id='file-import';fi.accept='application/json,.json';fi.style.display='none';
@@ -1204,10 +1292,11 @@ function initEvents(){
       try{
         const d=JSON.parse(rd.result);
         if(!d||!Array.isArray(d.series)||!Array.isArray(d.ideas)||!Array.isArray(d.notes)||!Array.isArray(d.webnotes)||!Array.isArray(d.tasks))throw new Error('bad');
-        if(!confirmBox('导入将覆盖当前全部数据，确定继续？'))return;
-        state=d;
-        state.notes.forEach(n=>{if(typeof n.url==='undefined')n.url='';});
-        save();render();toast('导入成功');
+        confirmDialog('导入将覆盖当前全部数据，确定继续？',()=>{
+          state=d;
+          state.notes.forEach(n=>{if(typeof n.url==='undefined')n.url='';});
+          save();render();toast('导入成功');
+        });
       }catch(err){toast('导入失败：文件格式不正确');}
     };
     rd.readAsText(f,'utf-8');
@@ -1233,4 +1322,3 @@ window.addEventListener('resize',()=>{if(window.innerWidth>719)closeSidebar();})
 </script>
 </body>
 </html>
-<!-- （注：内容由AI生成） -->
