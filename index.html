@@ -1105,8 +1105,31 @@ function viewEditor(kind,id){
     +'<div class="editor-actions"><button class="btn ghost" onclick="editorBack(\''+kind+'\')">取消</button><button class="btn" onclick="saveEditor(\''+kind+'\',\''+(id||'')+'\')">保存'+kindLabel+'</button></div>'
     +'</div>';
 }
+function cleanTitleLine(line){
+  let s=line.trim();
+  s=s.replace(/^#{1,6}\s*/,'').replace(/^>\s*/,'').replace(/^[-*+]\s+/,'').replace(/^\d+[.、)）]\s*/,'');
+  s=s.replace(/!\[[^\]]*\]\([^)]*\)/g,'');
+  s=s.replace(/\[([^\]]*)\]\([^)]*\)/g,'$1');
+  s=s.replace(/\|/g,' ');
+  s=s.replace(/[*`~]/g,'');
+  s=s.replace(/\s+/g,' ');
+  return s.trim();
+}
+function titleFromBody(text){
+  if(!text)return '';
+  for(const raw of String(text).split('\n')){
+    const t=raw.trim();
+    if(!t)continue;
+    if(/^(```|~~~)/.test(t))continue;
+    if(/^!\[[^\]]*\]\([^)]*\)$/.test(t))continue;
+    const c=cleanTitleLine(t);
+    if(!c)continue;
+    return Array.from(c).slice(0,20).join('');
+  }
+  return '';
+}
 function saveEditor(kind,id){
-  const title=fv('ed-title');
+  let title=fv('ed-title');
   const content=$('#ed-content').value;
   if(kind==='web'){
     let url=fv('ed-url');
@@ -1115,13 +1138,15 @@ function saveEditor(kind,id){
     if(id){const w=state.webnotes.find(x=>x.id===id);Object.assign(w,{url,title:title||url,excerpt:content,seriesId:fv('ed-series')||null});}
     else{state.webnotes.unshift({id:uid(),url,title:title||url,excerpt:content,seriesId:fv('ed-series')||null,createdAt:Date.now()});}
   }else if(kind==='note'){
-    if(!title){toast('请填写标题');return;}
+    if(!title)title=titleFromBody(content);
+    if(!title){toast('请填写标题或正文');return;}
     const url=fv('ed-url');
     if(url&&!/^https?:\/\//i.test(url)){toast('来源网址需以 http:// 或 https:// 开头');return;}
     if(id){const n=state.notes.find(x=>x.id===id);Object.assign(n,{title,content,url,seriesId:fv('ed-series')||null,pinned:$('#ed-pin').checked,updatedAt:Date.now()});}
     else{state.notes.unshift({id:uid(),title,content,url,seriesId:fv('ed-series')||null,pinned:$('#ed-pin').checked,createdAt:Date.now(),updatedAt:Date.now()});}
   }else{
-    if(!title){toast('请填写标题');return;}
+    if(!title)title=titleFromBody(content);
+    if(!title){toast('请填写标题或正文');return;}
     const impEl=$('#ed-imp .chip.on');
     const imp=impEl?+impEl.dataset.v:0;
     const tags=$('#ed-tags').value.split(/[,，]/).map(s=>s.trim()).filter(Boolean);
