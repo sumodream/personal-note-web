@@ -238,6 +238,38 @@ svg{display:block}
 .drop-menu button{display:flex;align-items:center;gap:8px;width:100%;border:none;background:none;padding:8px 10px;border-radius:7px;font-size:13.5px;color:var(--ink-2);cursor:pointer;text-align:left;font-family:inherit}
 .drop-menu button:hover{background:var(--hover-bg);color:var(--ink)}
 .drop-menu button svg{width:15px;height:15px}
+/* 长内容折叠 */
+.fold-wrap{margin-top:7px}
+.fold-body{position:relative}
+.fold-body.foldable.collapsed{max-height:380px;overflow:hidden}
+.fold-body.foldable.collapsed::after{content:'';position:absolute;left:0;right:0;bottom:0;height:90px;background:linear-gradient(to bottom,rgba(0,0,0,0),var(--card));pointer-events:none}
+.fold-btn{display:none;margin-top:8px;font-size:12.5px;color:var(--accent-deep);background:none;border:none;cursor:pointer;padding:2px 0;font-family:inherit;font-weight:600}
+.fold-btn.show{display:inline-flex;align-items:center;gap:4px}
+.fold-btn:hover{text-decoration:underline}
+/* 按系列分组 */
+.group{margin-bottom:26px}
+.group-head{display:flex;align-items:center;gap:9px;margin-bottom:11px;padding-bottom:7px;border-bottom:1px solid var(--line)}
+.group-head .g-dot{width:11px;height:11px;border-radius:50%;flex:0 0 11px}
+.group-head .g-name{font-size:15px;font-weight:700;color:var(--ink);display:flex;align-items:center;gap:8px}
+.group-head .g-cnt{font-size:12px;color:var(--muted);font-weight:400}
+.group-head .g-link{margin-left:auto;font-size:12px;color:var(--muted);cursor:pointer;padding:3px 8px;border-radius:6px;border:none;background:none;font-family:inherit}
+.group-head .g-link:hover{background:var(--card);color:var(--accent)}
+/* Markdown 编辑器 */
+.editor{max-width:1180px}
+.editor-top{display:flex;align-items:center;gap:12px;margin-bottom:14px}
+.editor-title{flex:1;min-width:0;font-size:19px;font-weight:700;border:none;background:none;color:var(--ink);font-family:inherit;padding:6px 2px;border-bottom:1px solid transparent}
+.editor-title:focus{outline:none;border-bottom-color:var(--line-strong)}
+.editor-meta{display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end;margin-bottom:14px;padding:12px 14px;background:var(--card);border:1px solid var(--line);border-radius:12px}
+.editor-meta .field{margin:0;min-width:150px}
+.editor-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:stretch}
+.editor-pane{display:flex;flex-direction:column;background:var(--card);border:1px solid var(--line);border-radius:13px;overflow:hidden;min-height:470px}
+.editor-pane .pane-head{display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid var(--line);font-size:12.5px;color:var(--muted);font-weight:600;background:var(--bg)}
+.editor-pane .pane-head .spacer{margin-left:auto}
+.editor-ta{flex:1;width:100%;min-height:410px;border:none;background:transparent;padding:14px;font-family:var(--mono);font-size:13.5px;line-height:1.75;resize:vertical;color:var(--ink)}
+.editor-ta:focus{outline:none}
+.editor-preview{padding:14px;overflow:auto;flex:1}
+.editor-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:16px}
+@media (max-width:900px){.editor-grid{grid-template-columns:1fr}}
 .md-content a{color:var(--sky)}
 .dot{width:8px;height:8px;border-radius:50%;display:inline-block;flex:0 0 8px}
 .pill{font-size:11px;font-weight:600;padding:1px 8px;border-radius:20px;line-height:18px}
@@ -735,7 +767,12 @@ function fmtLeft(n){
 /* ===== 路由与渲染 ===== */
 let route=location.hash||'#/';
 const TITLES={'/':'仪表盘','/ideas':'灵感 Idea','/notes':'笔记','/webnotes':'书签','/gantt':'甘特图倒计时','/series':'全部系列','/search':'搜索结果'};
-function navigate(h){route=h;if(location.hash!==h)location.hash=h;else render();closeSidebar();}
+function navigate(h){
+  if(editorDirty&&h!==route&&(route.indexOf('/e/')>0||route.endsWith('/new'))){
+    confirmDialog('内容还没保存，确定离开？',()=>{editorDirty=false;navigate(h);});return;
+  }
+  route=h;if(location.hash!==h)location.hash=h;else render();closeSidebar();
+}
 window.addEventListener('hashchange',()=>{route=location.hash||'#/';render();});
 function updateNav(){
   $$('#nav .nav-item').forEach(el=>{
@@ -764,8 +801,14 @@ function render(){
   let html='',title='仪表盘';
   if(seg==='/'||seg===''){title=TITLES['/'];html=viewDashboard();}
   else if(seg==='/ideas'){title=TITLES['/ideas'];html=viewIdeas();}
+  else if(seg==='/ideas/new'){title='新建灵感';html=viewEditor('idea','');}
+  else if(seg.startsWith('/ideas/e/')){const id=seg.slice(9);title='编辑灵感';html=viewEditor('idea',id);}
   else if(seg==='/notes'){title=TITLES['/notes'];html=viewNotes();}
+  else if(seg==='/notes/new'){title='新建笔记';html=viewEditor('note','');}
+  else if(seg.startsWith('/notes/e/')){const id=seg.slice(9);title='编辑笔记';html=viewEditor('note',id);}
   else if(seg==='/webnotes'){title=TITLES['/webnotes'];html=viewWebnotes();}
+  else if(seg==='/webnotes/new'){title='收藏网址';html=viewEditor('web','');}
+  else if(seg.startsWith('/webnotes/e/')){const id=seg.slice(12);title='编辑书签';html=viewEditor('web',id);}
   else if(seg==='/gantt'){title=TITLES['/gantt'];html=viewGantt();}
   else if(seg==='/series'){title=TITLES['/series'];html=viewSeries();}
   else if(seg.startsWith('/series/')){const id=seg.slice(8);const s=seriesById(id);title=s?s.name:'系列';html=viewSeriesDetail(id);}
@@ -781,7 +824,32 @@ function afterRender(){
   const week=['日','一','二','三','四','五','六'][d.getDay()];
   today.innerHTML='<span class="full">'+d.getFullYear()+'年'+(d.getMonth()+1)+'月'+d.getDate()+'日 · 周'+week+'</span><b>'+((d.getMonth()+1)+'/'+d.getDate())+'</b>';
   if(route==='#/search')syncSearch();
+  initFolds();
   hydrateAssets();
+  const ed=$('#ed-content');
+  if(ed){
+    editorDirty=false;
+    ed.addEventListener('input',onEditorInput);
+    const ttl=$('#ed-title');
+    if(ttl)ttl.addEventListener('input',()=>{editorDirty=true;});
+    const edSeg=route.replace(/^#/,'');
+    const edKind=edSeg.indexOf('/notes')===0?'note':edSeg.indexOf('/webnotes')===0?'web':edSeg.indexOf('/ideas')===0?'idea':'';
+    const idHit=edSeg.match(/\/e\/(.+)$/);
+    const edId=idHit?idHit[1]:'';
+    ed.addEventListener('keydown',e=>{
+      if(e.key==='Tab'){
+        e.preventDefault();
+        const pos=ed.selectionStart,stop=ed.selectionEnd;
+        ed.value=ed.value.slice(0,pos)+'  '+ed.value.slice(stop);
+        ed.selectionStart=ed.selectionEnd=pos+2;
+        editorDirty=true;refreshPreview();
+      }else if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='s'){
+        e.preventDefault();saveEditor(edKind,edId);
+      }
+    });
+    refreshPreview();
+    ed.focus();
+  }
 }
 
 /* ===== 仪表盘 ===== */
@@ -868,6 +936,75 @@ function emptyBox(t,d,route,btn){
   return '<div class="empty">'+ICONS.inbox+'<div class="t">'+esc(t)+'</div><div class="d">'+esc(d)+'</div>'+(btn?'<button class="btn sm" onclick="navigate(\''+route+'\')">'+esc(btn)+'</button>':'')+'</div>';
 }
 
+/* ===== 长内容折叠 ===== */
+const foldOpen=new Set();
+function foldBody(id,html){
+  return '<div class="fold-wrap"><div class="fold-body md-content" data-fold="'+esc(id)+'">'+html+'</div>'
+    +'<button class="fold-btn" data-fold="'+esc(id)+'" onclick="event.stopPropagation();toggleFold(\''+esc(id)+'\')">展开全文</button></div>';
+}
+function initFolds(){
+  $$('.fold-body').forEach(el=>{
+    const id=el.dataset.fold;
+    const btn=document.querySelector('.fold-btn[data-fold="'+id+'"]');
+    if(!btn)return;
+    if(foldOpen.has(id)){
+      el.classList.remove('foldable','collapsed');
+      btn.classList.add('show');btn.textContent='收起';
+      return;
+    }
+    el.classList.add('foldable','collapsed');
+    if(el.scrollHeight>el.clientHeight+16){
+      btn.classList.add('show');btn.textContent='展开全文';
+    }else{
+      el.classList.remove('foldable','collapsed');btn.classList.remove('show');
+    }
+  });
+}
+function toggleFold(id){
+  const el=document.querySelector('.fold-body[data-fold="'+id+'"]');
+  const btn=document.querySelector('.fold-btn[data-fold="'+id+'"]');
+  if(!el||!btn)return;
+  if(foldOpen.has(id)){
+    foldOpen.delete(id);
+    el.classList.add('foldable','collapsed');
+    btn.textContent='展开全文';
+  }else{
+    foldOpen.add(id);
+    el.classList.remove('foldable','collapsed');
+    btn.textContent='收起';
+  }
+}
+/* ===== 按系列分组 ===== */
+function groupBySeries(items,cardFn){
+  const buckets=new Map();
+  items.forEach(it=>{
+    let k=it.seriesId||'';
+    if(k&&!seriesById(k))k='';
+    if(!buckets.has(k))buckets.set(k,[]);
+    buckets.get(k).push(it);
+  });
+  const cards=arr=>'<div class="cards vertical">'+arr.map(cardFn).join('')+'</div>';
+  let html='',any=false;
+  seriesOrdered().forEach(pid=>{
+    const arr=buckets.get(pid);
+    if(!arr||!arr.length)return;
+    const s=seriesById(pid);if(!s)return;
+    any=true;
+    html+='<div class="group" style="padding-left:'+((seriesDepth(pid)-1)*14)+'px">'
+      +'<div class="group-head"><i class="g-dot" style="background:'+s.color+'"></i>'
+      +'<span class="g-name">'+esc(s.name)+'<span class="g-cnt">'+arr.length+' 条</span></span>'
+      +'<button class="g-link" onclick="navigate(\'#/series/'+s.id+'\')">查看系列 →</button></div>'
+      +cards(arr)+'</div>';
+  });
+  const un=buckets.get('')||[];
+  if(un.length){
+    any=true;
+    html+='<div class="group"><div class="group-head"><i class="g-dot" style="background:#8A93A5"></i>'
+      +'<span class="g-name">未分类<span class="g-cnt">'+un.length+' 条</span></span></div>'+cards(un)+'</div>';
+  }
+  return {html,any};
+}
+
 /* ===== Idea 视图 ===== */
 let ideaFilter='all';
 function viewIdeas(){
@@ -876,6 +1013,7 @@ function viewIdeas(){
   if(ideaFilter==='open')list=list.filter(i=>!i.done);
   if(ideaFilter==='done')list=list.filter(i=>i.done);
   if(ideaFilter!=='all'&&!['open','done'].includes(ideaFilter))list=list.filter(i=>i.tags.includes(ideaFilter));
+  const g=groupBySeries(list,ideaCard);
   return `
   <div class="toolbar">
     <button class="btn" onclick="openIdeaModal()">${ICONS.plus}新建灵感</button>
@@ -887,17 +1025,16 @@ function viewIdeas(){
       ${tags.map(t=>`<button class="chip ${ideaFilter===t?'on':''}" onclick="ideaFilter='${t}';render()">${esc(t)}<span class="cnt">${state.ideas.filter(i=>i.tags.includes(t)).length}</span></button>`).join('')}
     </div>
   </div>
-  ${list.length?`<div class="cards vertical">${list.map(ideaCard).join('')}</div>`:emptyBox('这里还没有灵感','点击右上角「新建灵感」记录第一个想法，可以打标签、归入系列。','#/ideas','去记录')}`;
+  ${list.length?g.html:emptyBox('这里还没有灵感','点击右上角「新建灵感」记录第一个想法，可以打标签、归入系列。','#/ideas','去记录')}`;
 }
 function ideaCard(i){
-  const s=seriesById(i.seriesId);
   const imp=i.importance===2?'<span class="pill star">加急</span>':i.importance===1?'<span class="pill open">重要</span>':'';
   return `<div class="entry">
     <span class="rail ${i.done?'':'on'}"></span>
     <div class="body">
       <div class="title"><span class="t">${esc(i.title)}</span>${imp}${i.done?'<span class="pill done">已完成</span>':''}</div>
-      <div class="meta">${relTime(i.updatedAt||i.createdAt)}${entryMeta({ref:i})}${i.tags.map(t=>'<span class="tag">'+esc(t)+'</span>').join('')}</div>
-      ${i.content?'<div class="content md-content">'+md(i.content)+'</div>':''}
+      <div class="meta">${relTime(i.updatedAt||i.createdAt)}${i.tags.map(t=>'<span class="tag">'+esc(t)+'</span>').join('')}</div>
+      ${i.content?foldBody(i.id,md(i.content)):''}
     </div>
     <div class="actions">
       <button class="icon-btn" title="标记完成" onclick="toggleIdea('${i.id}')">${i.done?ICONS.ring:ICONS.check}</button>
@@ -906,42 +1043,103 @@ function ideaCard(i){
     </div>
   </div>`;
 }
-function openIdeaModal(id,presetSeries){
-  const i=id?state.ideas.find(x=>x.id===id):null;
-  openModal(`<div class="modal">
-    <div class="modal-head"><h3>${i?'编辑灵感':'记录灵感'}</h3><button class="icon-btn" onclick="closeModal()">${ICONS.del}</button></div>
-    <div class="modal-body">
-      <div class="field"><label>标题</label><input class="input" id="f-title" maxlength="120" placeholder="一句话描述这个想法" value="${i?esc(i.title):''}"></div>
-      <div class="field"><label>内容 <span class="hint">可选</span></label>
-        <div class="md-toolbar"><button type="button" class="btn ghost sm" onclick="insertImg('f-content')">${ICONS.img}插入图片</button><span class="hint">支持直接粘贴截图</span></div>
-        <textarea class="textarea" id="f-content" onpaste="pasteImg(event,'f-content')" placeholder="展开描述、背景或下一步…">${i?esc(i.content):''}</textarea></div>
-      <div class="form-row">
-        <div class="field"><label>系列</label><select class="select" id="f-series">${seriesOptions(i?i.seriesId:(presetSeries||''))}</select></div>
-        <div class="field"><label>标签 <span class="hint">逗号分隔</span></label><input class="input" id="f-tags" placeholder="如：前端, 灵感" value="${i?esc(i.tags.join(', ')):''}"></div>
-      </div>
-      <div class="field"><label>重要度</label>
-        <div class="filter-group" id="f-imp">
-          <button type="button" class="chip" data-v="0" onclick="pickImp(this)">普通</button>
-          <button type="button" class="chip" data-v="1" onclick="pickImp(this)">重要</button>
-          <button type="button" class="chip" data-v="2" onclick="pickImp(this)">加急</button>
-        </div>
-      </div>
-      <div class="modal-foot"><button class="btn ghost" onclick="closeModal()">取消</button><button class="btn" onclick="saveIdea('${id||''}')">保存</button></div>
-    </div>
-  </div>`);
-  const imp=i?i.importance:0;
-  $$('#f-imp .chip').forEach(c=>c.classList.toggle('on',+c.dataset.v===imp));
+/* ===== Markdown 编辑器 ===== */
+let editorPresetSeries='',editorDirty=false,previewTimer=null;
+function pickImpEd(el){$$('#ed-imp .chip').forEach(c=>c.classList.remove('on'));el.classList.add('on');}
+function refreshPreview(){
+  const ta=$('#ed-content'),pv=$('#ed-preview');
+  if(!ta||!pv)return;
+  pv.innerHTML=md(ta.value);
+  hydrateAssets();
 }
+function onEditorInput(){
+  editorDirty=true;
+  clearTimeout(previewTimer);
+  previewTimer=setTimeout(refreshPreview,160);
+}
+function viewEditor(kind,id){
+  const coll=kind==='idea'?state.ideas:kind==='note'?state.notes:state.webnotes;
+  const rec=id?coll.find(x=>x.id===id):null;
+  if(id&&!rec)return '<div class="empty">这条内容已不存在</div>';
+  const isNew=!rec;
+  const kindLabel=kind==='idea'?'灵感':kind==='note'?'笔记':'书签';
+  const seriesSel=rec?(rec.seriesId||''):(editorPresetSeries||'');
+  const content=rec?(kind==='web'?(rec.excerpt||''):(rec.content||'')):'';
+  const titleVal=rec?(rec.title||''):'';
+  const imp=rec&&kind==='idea'?(rec.importance||0):0;
+  let fields='';
+  if(kind==='idea'){
+    fields='<div class="field"><label>系列</label><select class="select" id="ed-series">'+seriesOptions(seriesSel)+'</select></div>'
+      +'<div class="field" style="flex:1;min-width:220px"><label>标签 <span class="hint">逗号分隔</span></label><input class="input" id="ed-tags" placeholder="如：前端, 灵感" value="'+(rec?esc((rec.tags||[]).join(', ')):'')+'"></div>'
+      +'<div class="field"><label>重要度</label><div class="filter-group" id="ed-imp">'
+      +'<button type="button" class="chip'+(imp===0?' on':'')+'" data-v="0" onclick="pickImpEd(this)">普通</button>'
+      +'<button type="button" class="chip'+(imp===1?' on':'')+'" data-v="1" onclick="pickImpEd(this)">重要</button>'
+      +'<button type="button" class="chip'+(imp===2?' on':'')+'" data-v="2" onclick="pickImpEd(this)">加急</button>'
+      +'</div></div>';
+  }else if(kind==='note'){
+    fields='<div class="field"><label>系列</label><select class="select" id="ed-series">'+seriesOptions(seriesSel)+'</select></div>'
+      +'<div class="field" style="flex:1;min-width:240px"><label>来源网址 <span class="hint">可选 · 摘录自某篇文章</span></label><input class="input" id="ed-url" placeholder="https://…" value="'+(rec?esc(rec.url||''):'')+'"></div>'
+      +'<div class="field"><label>置顶</label><label style="display:flex;align-items:center;gap:8px;font-size:13.5px;padding-top:9px;cursor:pointer"><input type="checkbox" id="ed-pin" '+((rec&&rec.pinned)?'checked':'')+' style="width:17px;height:17px;accent-color:var(--accent)"> 优先显示</label></div>';
+  }else{
+    fields='<div class="field" style="flex:1;min-width:280px"><label>网址</label><input class="input" id="ed-url" placeholder="https://…" value="'+(rec?esc(rec.url||''):'')+'"></div>'
+      +'<div class="field"><label>系列</label><select class="select" id="ed-series">'+seriesOptions(seriesSel)+'</select></div>';
+  }
+  const cPlace=kind==='web'?'为什么值得收藏？可以写下整段摘录或点评…':'支持 Markdown：标题、列表、引用、代码块、表格、图片…';
+  const tPlace=isNew?'给这条'+kindLabel+'起个标题':'标题';
+  const saveBtn='<button class="btn" onclick="saveEditor(\''+kind+'\',\''+(id||'')+'\')">保存</button>';
+  return '<div class="editor">'
+    +'<div class="editor-top">'
+    +'<button class="btn ghost sm" onclick="editorBack(\''+kind+'\')" style="display:inline-flex;align-items:center;gap:5px">← 返回'+kindLabel+'列表</button>'
+    +'<input class="editor-title" id="ed-title" maxlength="140" placeholder="'+esc(tPlace)+'" value="'+esc(titleVal)+'">'
+    +saveBtn
+    +'</div>'
+    +'<div class="editor-meta">'+fields+'</div>'
+    +'<div class="editor-grid">'
+    +'<div class="editor-pane"><div class="pane-head"><span>'+(kind==='web'?'摘录与备注':'Markdown 内容')+'</span><div class="spacer"></div>'
+    +'<button type="button" class="btn xs ghost" onclick="insertImg(\'ed-content\')">'+ICONS.img+'插入图片</button>'
+    +'<span class="hint" style="font-size:11.5px">可直接粘贴截图</span></div>'
+    +'<textarea class="editor-ta" id="ed-content" onpaste="pasteImg(event,\'ed-content\')" placeholder="'+esc(cPlace)+'">'+esc(content)+'</textarea></div>'
+    +'<div class="editor-pane"><div class="pane-head"><span>实时预览</span><div class="spacer"></div><span class="hint" style="font-size:11.5px">边写边看效果</span></div>'
+    +'<div class="editor-preview md-content" id="ed-preview"></div></div>'
+    +'</div>'
+    +'<div class="editor-actions"><button class="btn ghost" onclick="editorBack(\''+kind+'\')">取消</button><button class="btn" onclick="saveEditor(\''+kind+'\',\''+(id||'')+'\')">保存'+kindLabel+'</button></div>'
+    +'</div>';
+}
+function saveEditor(kind,id){
+  const title=fv('ed-title');
+  const content=$('#ed-content').value;
+  if(kind==='web'){
+    let url=fv('ed-url');
+    if(!url){toast('请填写网址');return;}
+    if(!/^https?:\/\//i.test(url))url='https://'+url;
+    if(id){const w=state.webnotes.find(x=>x.id===id);Object.assign(w,{url,title:title||url,excerpt:content,seriesId:fv('ed-series')||null});}
+    else{state.webnotes.unshift({id:uid(),url,title:title||url,excerpt:content,seriesId:fv('ed-series')||null,createdAt:Date.now()});}
+  }else if(kind==='note'){
+    if(!title){toast('请填写标题');return;}
+    const url=fv('ed-url');
+    if(url&&!/^https?:\/\//i.test(url)){toast('来源网址需以 http:// 或 https:// 开头');return;}
+    if(id){const n=state.notes.find(x=>x.id===id);Object.assign(n,{title,content,url,seriesId:fv('ed-series')||null,pinned:$('#ed-pin').checked,updatedAt:Date.now()});}
+    else{state.notes.unshift({id:uid(),title,content,url,seriesId:fv('ed-series')||null,pinned:$('#ed-pin').checked,createdAt:Date.now(),updatedAt:Date.now()});}
+  }else{
+    if(!title){toast('请填写标题');return;}
+    const impEl=$('#ed-imp .chip.on');
+    const imp=impEl?+impEl.dataset.v:0;
+    const tags=$('#ed-tags').value.split(/[,，]/).map(s=>s.trim()).filter(Boolean);
+    if(id){const i=state.ideas.find(x=>x.id===id);Object.assign(i,{title,content,tags,seriesId:fv('ed-series')||null,importance:imp,updatedAt:Date.now()});}
+    else{state.ideas.unshift({id:uid(),title,content,tags,seriesId:fv('ed-series')||null,done:false,importance:imp,createdAt:Date.now(),updatedAt:Date.now()});}
+  }
+  editorDirty=false;
+  save();
+  navigate(kind==='idea'?'#/ideas':kind==='note'?'#/notes':'#/webnotes');
+  toast(kind==='idea'?'灵感已保存':kind==='note'?'笔记已保存':'书签已保存');
+}
+function editorBack(kind){
+  const back=kind==='idea'?'#/ideas':kind==='note'?'#/notes':'#/webnotes';
+  if(editorDirty){confirmDialog('内容还没保存，确定离开？',()=>{editorDirty=false;navigate(back);});return;}
+  navigate(back);
+}
+function openIdeaModal(id,presetSeries){editorPresetSeries=presetSeries||'';navigate(id?'#/ideas/e/'+id:'#/ideas/new');}
 function pickImp(el){$$('#f-imp .chip').forEach(c=>c.classList.remove('on'));el.classList.add('on');}
-function saveIdea(id){
-  const title=fv('f-title');if(!title){toast('请填写标题');return;}
-  const imp=+$('#f-imp .chip.on').dataset.v;
-  const tags=$('#f-tags').value.split(/[,，]/).map(s=>s.trim()).filter(Boolean);
-  const content=fv('f-content');
-  if(id){const i=state.ideas.find(x=>x.id===id);Object.assign(i,{title,content,tags,seriesId:fv('f-series')||null,importance:imp,updatedAt:Date.now()});}
-  else{state.ideas.unshift({id:uid(),title,content,tags,seriesId:fv('f-series')||null,done:false,importance:imp,createdAt:Date.now(),updatedAt:Date.now()});}
-  save();closeModal();render();toast(id?'灵感已更新':'灵感已记录');
-}
 function toggleIdea(id){const i=state.ideas.find(x=>x.id===id);i.done=!i.done;i.updatedAt=Date.now();save();render();}
 function delIdea(id){confirmDialog('删除这条灵感？',()=>{state.ideas=state.ideas.filter(x=>x.id!==id);save();render();toast('已删除');});}
 function fv(id){return $('#'+id).value.trim();}
@@ -1024,6 +1222,8 @@ function insertImgAt(taId,ins){
   const end=ta.selectionEnd||pos;
   ta.value=ta.value.slice(0,pos)+ins+ta.value.slice(end);
   ta.focus();const np=pos+ins.length;ta.setSelectionRange(np,np);
+  editorDirty=true;
+  if($('#ed-preview'))refreshPreview();
 }
 const assetCache={};
 function hydrateAssets(){
@@ -1059,6 +1259,7 @@ let noteSeriesFilter='';
 function viewNotes(){
   let list=state.notes.slice().sort((a,b)=>(b.pinned-a.pinned)||(b.updatedAt-a.updatedAt));
   if(noteSeriesFilter)list=list.filter(n=>n.seriesId===noteSeriesFilter);
+  const g=groupBySeries(list,noteCard);
   return `
   <div class="toolbar">
     <button class="btn" onclick="openNoteModal()">${ICONS.plus}新建笔记</button>
@@ -1069,16 +1270,15 @@ function viewNotes(){
     </select>
     <button class="btn ghost sm" onclick="navigate('#/search')">${ICONS.search}搜索</button>
   </div>
-  ${list.length?`<div class="cards vertical">${list.map(noteCard).join('')}</div>`:emptyBox('还没有笔记','写一篇长一点的笔记，把想法沉淀下来，可以置顶或归入系列。','#/notes','去记录')}`;
+  ${list.length?g.html:emptyBox('还没有笔记','写一篇长一点的笔记，把想法沉淀下来，可以置顶或归入系列。','#/notes','去记录')}`;
 }
 function noteCard(n){
-  const s=seriesById(n.seriesId);
-  return `<div class="entry" style="cursor:pointer" onclick="openNoteDetail('${n.id}')">
+  return `<div class="entry" style="cursor:pointer" onclick="openNoteModal('${n.id}')">
     <span class="rail ${n.pinned?'on':''}"></span>
     <div class="body">
       <div class="title"><span class="t">${esc(n.title)}</span>${n.pinned?'<span class="pill" style="background:var(--amber-soft);color:#8A5F15">置顶</span>':''}</div>
-      <div class="meta">${relTime(n.updatedAt||n.createdAt)}${entryMeta({ref:n})}${n.url?'<span class="note-src" title="'+esc(n.url)+'" onclick="event.stopPropagation();window.open(\''+esc(n.url)+'\',\'_blank\')">'+ICONS.link+'<span style="overflow:hidden;text-overflow:ellipsis">'+esc(n.url.replace(/^https?:\/\//,''))+'</span></span>':''}</div>
-      ${n.content?'<div class="content md-content">'+md(n.content)+'</div>':''}
+      <div class="meta">${relTime(n.updatedAt||n.createdAt)}${n.url?'<span class="note-src" title="'+esc(n.url)+'" onclick="event.stopPropagation();window.open(\''+esc(n.url)+'\',\'_blank\')">'+ICONS.link+'<span style="overflow:hidden;text-overflow:ellipsis">'+esc(n.url.replace(/^https?:\/\//,''))+'</span></span>':''}</div>
+      ${n.content?foldBody(n.id,md(n.content)):''}
     </div>
     <div class="actions">
       <button class="icon-btn" title="置顶" onclick="event.stopPropagation();togglePin('${n.id}')">${ICONS.pin}</button>
@@ -1087,46 +1287,8 @@ function noteCard(n){
     </div>
   </div>`;
 }
-function openNoteModal(id,presetSeries){
-  const n=id?state.notes.find(x=>x.id===id):null;
-  openModal(`<div class="modal">
-    <div class="modal-head"><h3>${n?'编辑笔记':'新建笔记'}</h3><button class="icon-btn" onclick="closeModal()">${ICONS.del}</button></div>
-    <div class="modal-body">
-      <div class="field"><label>标题</label><input class="input" id="f-title" maxlength="120" placeholder="笔记标题" value="${n?esc(n.title):''}"></div>
-      <div class="field"><label>内容</label>
-        <div class="md-toolbar"><button type="button" class="btn ghost sm" onclick="insertImg('f-content')">${ICONS.img}插入图片</button><span class="hint">支持直接粘贴截图</span></div>
-        <textarea class="textarea" id="f-content" onpaste="pasteImg(event,'f-content')" style="min-height:180px" placeholder="正文…">${n?esc(n.content):''}</textarea></div>
-      <div class="field"><label>来源网址 <span class="hint">可选 · 摘录自某篇博客或文章时填写</span></label><input class="input" id="f-url" placeholder="https://…" value="${n?esc(n.url||''):''}"></div>
-      <div class="form-row">
-        <div class="field"><label>系列</label><select class="select" id="f-series">${seriesOptions(n?n.seriesId:(presetSeries||''))}</select></div>
-        <div class="field"><label>置顶</label><label style="display:flex;align-items:center;gap:8px;font-size:14px;padding-top:9px;cursor:pointer"><input type="checkbox" id="f-pin" ${n&&n.pinned?'checked':''} style="width:17px;height:17px;accent-color:var(--accent)"> 在列表中优先显示</label></div>
-      </div>
-      <div class="modal-foot"><button class="btn ghost" onclick="closeModal()">取消</button><button class="btn" onclick="saveNote('${id||''}')">保存</button></div>
-    </div>
-  </div>`);
-}
-function saveNote(id){
-  const title=fv('f-title');if(!title){toast('请填写标题');return;}
-  const url=fv('f-url');
-  if(url&&!/^https?:\/\//i.test(url)){toast('来源网址需以 http:// 或 https:// 开头');return;}
-  const content=fv('f-content');
-  if(id){const n=state.notes.find(x=>x.id===id);Object.assign(n,{title,content,url,seriesId:fv('f-series')||null,pinned:$('#f-pin').checked,updatedAt:Date.now()});}
-  else{state.notes.unshift({id:uid(),title,content,url,seriesId:fv('f-series')||null,pinned:$('#f-pin').checked,createdAt:Date.now(),updatedAt:Date.now()});}
-  save();closeModal();render();toast(id?'笔记已更新':'笔记已保存');
-}
-function openNoteDetail(id){
-  const n=state.notes.find(x=>x.id===id);if(!n)return;
-  const s=seriesById(n.seriesId);
-  openModal(`<div class="modal" style="max-width:640px">
-    <div class="modal-head"><h3>${esc(n.title)}</h3><button class="icon-btn" onclick="closeModal()">${ICONS.del}</button></div>
-    <div class="modal-body">
-      <div class="meta" style="margin-bottom:14px;font-size:12px;color:var(--muted);display:flex;gap:10px;flex-wrap:wrap;align-items:center">${relTime(n.updatedAt||n.createdAt)}${s?'<span><i class="dot" style="background:'+s.color+'"></i> '+esc(s.name)+'</span>':''}${n.url?'<a href="'+esc(n.url)+'" target="_blank" rel="noopener" style="color:var(--sky);display:inline-flex;align-items:center;gap:5px;max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+ICONS.link+esc(n.url)+'</a>':''}</div>
-      <div style="font-size:14.5px;line-height:1.8" class="md-content">${md(n.content)}</div>
-      <div class="modal-foot" style="margin-top:18px"><button class="btn ghost" onclick="closeModal()">关闭</button><button class="btn" onclick="closeModal();openNoteModal('${n.id}')">编辑</button></div>
-    </div>
-  </div>`);
-  hydrateAssets();
-}
+function openNoteModal(id,presetSeries){editorPresetSeries=presetSeries||'';navigate(id?'#/notes/e/'+id:'#/notes/new');}
+function openNoteDetail(id){openNoteModal(id);}
 function togglePin(id){const n=state.notes.find(x=>x.id===id);n.pinned=!n.pinned;n.updatedAt=Date.now();save();render();}
 function delNote(id){confirmDialog('删除这篇笔记？',()=>{state.notes=state.notes.filter(x=>x.id!==id);save();render();toast('已删除');});}
 /* ===== 书签视图 ===== */
@@ -1134,6 +1296,7 @@ let webSeriesFilter='';
 function viewWebnotes(){
   let list=state.webnotes.slice().sort((a,b)=>b.createdAt-a.createdAt);
   if(webSeriesFilter)list=list.filter(w=>w.seriesId===webSeriesFilter);
+  const g=groupBySeries(list,webCard);
   return `
   <div class="toolbar">
     <button class="btn" onclick="openWebModal()">${ICONS.plus}收藏网址</button>
@@ -1144,18 +1307,17 @@ function viewWebnotes(){
     </select>
     <button class="btn ghost sm" onclick="navigate('#/search')">${ICONS.search}搜索</button>
   </div>
-  ${list.length?`<div class="cards">${list.map(webCard).join('')}</div>`:emptyBox('还没有书签','把通篇都有用的文章、工具站网址收藏进来，点击标题即可打开原文。','#/webnotes','去收藏')}`;
+  ${list.length?g.html:emptyBox('还没有书签','把通篇都有用的文章、工具站网址收藏进来，点击标题即可打开原文。','#/webnotes','去收藏')}`;
 }
 function webCard(w){
-  const s=seriesById(w.seriesId);
   const host=w.url.replace(/^https?:\/\//,'').split('/')[0];
   return `<div class="entry web-card">
     <span class="favicon">${ICONS.web}</span>
     <div class="body">
       <div class="title"><span class="t" style="cursor:pointer" onclick="window.open('${esc(w.url)}','_blank')">${esc(w.title)}</span></div>
       <div class="url" title="${esc(w.url)}" onclick="window.open('${esc(w.url)}','_blank')">${ICONS.link}${esc(host)}</div>
-      ${w.excerpt?'<div class="content clamp">'+esc(w.excerpt)+'</div>':''}
-      <div class="meta">${relTime(w.createdAt)}${entryMeta({ref:w})}</div>
+      ${w.excerpt?foldBody(w.id,md(w.excerpt)):''}
+      <div class="meta">${relTime(w.createdAt)}</div>
     </div>
     <div class="actions">
       <button class="icon-btn" title="在浏览器打开" onclick="window.open('${esc(w.url)}','_blank')">${ICONS.link}</button>
@@ -1164,27 +1326,7 @@ function webCard(w){
     </div>
   </div>`;
 }
-function openWebModal(id){
-  const w=id?state.webnotes.find(x=>x.id===id):null;
-  openModal(`<div class="modal">
-    <div class="modal-head"><h3>${w?'编辑网站笔记':'收藏网址'}</h3><button class="icon-btn" onclick="closeModal()">${ICONS.del}</button></div>
-    <div class="modal-body">
-      <div class="field"><label>网址</label><input class="input" id="f-url" placeholder="https://…" value="${w?esc(w.url):''}"></div>
-      <div class="field"><label>标题</label><input class="input" id="f-title" maxlength="120" placeholder="网页或文章标题" value="${w?esc(w.title):''}"></div>
-      <div class="field"><label>摘录 <span class="hint">可选</span></label><textarea class="textarea" id="f-excerpt" style="min-height:80px" placeholder="为什么值得收藏？一句话记下…">${w?esc(w.excerpt):''}</textarea></div>
-      <div class="field"><label>系列</label><select class="select" id="f-series">${seriesOptions(w?w.seriesId:'')}</select></div>
-      <div class="modal-foot"><button class="btn ghost" onclick="closeModal()">取消</button><button class="btn" onclick="saveWeb('${id||''}')">保存</button></div>
-    </div>
-  </div>`);
-}
-function saveWeb(id){
-  let url=fv('f-url');if(!url){toast('请填写网址');return;}
-  if(!/^https?:\/\//i.test(url))url='https://'+url;
-  const title=fv('f-title')||url;
-  if(id){const w=state.webnotes.find(x=>x.id===id);Object.assign(w,{url,title,excerpt:fv('f-excerpt'),seriesId:fv('f-series')||null});}
-  else{state.webnotes.unshift({id:uid(),url,title,excerpt:fv('f-excerpt'),seriesId:fv('f-series')||null,createdAt:Date.now()});}
-  save();closeModal();render();toast(id?'网站笔记已更新':'已收藏');
-}
+function openWebModal(id){editorPresetSeries='';navigate(id?'#/webnotes/e/'+id:'#/webnotes/new');}
 function delWeb(id){confirmDialog('删除这条网站笔记？',()=>{state.webnotes=state.webnotes.filter(x=>x.id!==id);save();render();toast('已删除');});}
 
 /* ===== 甘特图倒计时视图 ===== */
@@ -1325,13 +1467,21 @@ function delTask(id){confirmDialog('删除这个任务？',()=>{state.tasks=stat
 
 /* ===== 系列视图 ===== */
 function viewSeries(){
+  const un={ideas:state.ideas.filter(i=>!i.seriesId).length,notes:state.notes.filter(n=>!n.seriesId).length,webs:state.webnotes.filter(w=>!w.seriesId).length,tasks:state.tasks.filter(t=>!t.seriesId).length};
+  const unTotal=un.ideas+un.notes+un.webs+un.tasks;
   return `
   <div class="toolbar">
     <button class="btn" onclick="openSeriesModal()">${ICONS.plus}新建系列</button>
     <div class="spacer"></div>
     <button class="btn ghost sm" onclick="navigate('#/search')">${ICONS.search}搜索</button>
   </div>
-  ${state.series.length?`<div class="series-grid">${state.series.filter(s=>!s.parentId).map(seriesCard).join('')}</div>`:emptyBox('还没有系列','系列用来把灵感、笔记、网站和任务组织成一条线索，例如「个人项目」「读书计划」。','#/series','去创建')}`;
+  ${state.series.length?`<div class="series-grid">${state.series.filter(s=>!s.parentId).map(seriesCard).join('')}</div>`:emptyBox('还没有系列','系列用来把灵感、笔记、网站和任务组织成一条线索，例如「个人项目」「读书计划」。','#/series','去创建')}
+  ${unTotal?`<div class="section" style="margin-top:26px"><div class="section-head"><h2>${ICONS.inbox} 未分类</h2></div>
+    <div class="cards"><div class="entry"><span class="rail"></span><div class="body">
+      <div class="meta" style="margin:0;gap:14px">${[['灵感',un.ideas],['笔记',un.notes],['书签',un.webs],['任务',un.tasks]].filter(p=>p[1]>0).map(p=>'<span>'+p[0]+' '+p[1]+' 条</span>').join('')}</div>
+      <div style="font-size:12.5px;color:var(--muted);margin-top:7px">这些内容还没有归入系列。在各列表页的「未分类」分组中可以看到并编辑，编辑时选择系列即可归类。</div>
+    </div></div></div>
+  </div>`:''}`;
 }
 function seriesCard(s){
   const cnt=seriesCount(s.id);
