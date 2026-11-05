@@ -225,6 +225,19 @@ svg{display:block}
 .md-content th,.md-content td{border:1px solid var(--line-strong);padding:6px 10px;text-align:left}
 .md-content th{background:var(--hover-bg);font-weight:600}
 .md-content hr{border:none;border-top:1px solid var(--line-strong);margin:.8em 0}
+.md-content img{max-width:100%;height:auto;border-radius:8px;margin:.5em 0;display:block}
+.md-toolbar{display:flex;align-items:center;gap:10px;margin-bottom:6px}
+.md-toolbar .hint{font-size:12px;color:var(--muted)}
+.color-pick{display:flex;gap:9px;flex-wrap:wrap;padding-top:5px}
+.color-dot{width:26px;height:26px;border-radius:50%;border:2px solid transparent;cursor:pointer;padding:0;transition:transform .15s,border-color .15s}
+.color-dot:hover{transform:scale(1.08)}
+.color-dot.on{border-color:var(--ink);box-shadow:0 0 0 3px var(--card) inset}
+.drop{position:relative;display:inline-block}
+.drop-menu{position:absolute;right:0;top:calc(100% + 6px);z-index:60;min-width:130px;background:var(--card);border:1px solid var(--line-strong);border-radius:10px;box-shadow:0 8px 24px rgba(20,30,45,.14);padding:5px;display:none}
+.drop-menu.open{display:block}
+.drop-menu button{display:flex;align-items:center;gap:8px;width:100%;border:none;background:none;padding:8px 10px;border-radius:7px;font-size:13.5px;color:var(--ink-2);cursor:pointer;text-align:left;font-family:inherit}
+.drop-menu button:hover{background:var(--hover-bg);color:var(--ink)}
+.drop-menu button svg{width:15px;height:15px}
 .md-content a{color:var(--sky)}
 .dot{width:8px;height:8px;border-radius:50%;display:inline-block;flex:0 0 8px}
 .pill{font-size:11px;font-weight:600;padding:1px 8px;border-radius:20px;line-height:18px}
@@ -343,6 +356,12 @@ input[type="range"]{accent-color:var(--accent)}
 .series-card .s-foot{display:flex;gap:6px;margin-top:4px}
 .series-strip{display:flex;gap:6px;margin-top:2px}
 .series-strip .dot{width:10px;height:10px}
+.series-card .s-kids{margin-top:4px;border-left:2px solid var(--line);padding-left:12px;display:flex;flex-direction:column;gap:2px}
+.s-sub{display:flex;align-items:center;gap:8px;padding:7px 8px;border-radius:8px;cursor:pointer;font-size:13.5px;flex-wrap:wrap}
+.s-sub:hover{background:var(--hover-bg)}
+.s-sub .s-sub-name{flex:1;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.s-sub .s-count{font-size:12px;color:var(--faint);flex:0 0 auto}
+.s-sub-kids{margin-left:12px;border-left:2px solid var(--line);padding-left:10px;display:flex;flex-direction:column;gap:2px;width:100%}
 
 /* ===== 网站笔记 ===== */
 .web-card .favicon{width:38px;height:38px;flex:0 0 38px;border-radius:9px;background:var(--bg);display:flex;align-items:center;justify-content:center;border:1px solid var(--line);overflow:hidden}
@@ -463,6 +482,7 @@ function md(src){
   let s=esc(src).replace(/^&gt;\s?/gm,'> ');
   /* 行内语法（在转义之后处理，保证无 XSS） */
   s=s.replace(/`([^`\n]+)`/g,'<code>$1</code>');
+  s=s.replace(/!\[([^\]]*)\]\(([^)\s]+)\)/g,(m,t,u)=>u.indexOf('asset:')===0?'<img data-asset="'+u.slice(6)+'" alt="'+t+'" loading="lazy">':'<img src="'+u+'" alt="'+t+'" loading="lazy">');
   s=s.replace(/\*\*([^*\n]+)\*\*/g,'<strong>$1</strong>');
   s=s.replace(/~~([^~\n]+)~~/g,'<del>$1</del>');
   s=s.replace(/\*([^*\n]+)\*/g,'<em>$1</em>');
@@ -510,6 +530,17 @@ const D=86400000;
 function fmtDate(ts){const d=new Date(ts);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
 function todayStr(){return fmtDate(Date.now());}
 function parseDay(s){const p=s.split('-').map(Number);return new Date(p[0],p[1]-1,p[2]).getTime();}
+function parseDate(s){
+  if(!s)return null;
+  s=String(s).trim();
+  let m=s.match(/^(\d{4})[.\-/年](\d{1,2})[.\-/月](\d{1,2})日?$/);
+  if(!m)m=s.match(/^(\d{4})(\d{2})(\d{2})$/);
+  if(!m)return null;
+  const y=+m[1],mo=+m[2],d=+m[3];
+  const dt=new Date(y,mo-1,d);
+  if(dt.getFullYear()!==y||dt.getMonth()!==mo-1||dt.getDate()!==d)return null;
+  return y+'-'+pad(mo)+'-'+pad(d);
+}
 function dayDiff(a,b){return Math.round((parseDay(b)-parseDay(a))/D);}
 function relTime(ts){
   const diff=Date.now()-ts;
@@ -536,7 +567,8 @@ const ICONS={
   ring:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>',
   search:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>',
   folder:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>',
-  inbox:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.5 5h13l3.5 7v5a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-5z"/></svg>'
+  inbox:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.5 5h13l3.5 7v5a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-5z"/></svg>',
+  img:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>'
 };
 
 /* ===== 数据与存储 ===== */
@@ -550,23 +582,27 @@ function seedData(){
   const s1=uid(),s2=uid(),s3=uid();
   return {
     series:[
-      {id:s1,name:'个人项目',desc:'自己正在推进的独立项目与长期计划',color:SERIES_COLORS[0],createdAt:now-30*D},
-      {id:s2,name:'学习进修',desc:'读书、课程与技能提升相关的积累',color:SERIES_COLORS[1],createdAt:now-28*D},
-      {id:s3,name:'工作备忘',desc:'工作中值得沉淀的做法与素材',color:SERIES_COLORS[3],createdAt:now-25*D}
+      {id:s1,name:'个人项目',desc:'自己正在推进的独立项目与长期计划',color:SERIES_COLORS[0],parentId:null,createdAt:now-30*D},
+      {id:s1a,name:'移动端',desc:'App 与移动网页相关的迭代',color:SERIES_COLORS[4],parentId:s1,createdAt:now-26*D},
+      {id:s1b,name:'桌面端',desc:'桌面客户端与网页端的工作',color:SERIES_COLORS[3],parentId:s1,createdAt:now-24*D},
+      {id:s1aa,name:'发布准备',desc:'上线前的检查与发布流程',color:SERIES_COLORS[6],parentId:s1a,createdAt:now-20*D},
+      {id:s2,name:'学习进修',desc:'读书、课程与技能提升相关的积累',color:SERIES_COLORS[1],parentId:null,createdAt:now-28*D},
+      {id:s2a,name:'读书卡片',desc:'从书里提炼出的可复用卡片',color:SERIES_COLORS[8],parentId:s2,createdAt:now-18*D},
+      {id:s3,name:'工作备忘',desc:'工作中值得沉淀的做法与素材',color:SERIES_COLORS[3],parentId:null,createdAt:now-25*D}
     ],
     ideas:[
-      {id:uid(),title:'把甘特图倒计时做成小组件',content:'做一个可嵌入个人主页的**迷你组件**：\n\n- 显示最近一个里程碑还剩多少天\n- 用环形进度 + 渐变配色\n- 数据通过 `iframe` 或 API 暴露',tags:['前端','灵感'],seriesId:s1,done:false,importance:1,createdAt:now-2*D,updatedAt:now-2*D},
+      {id:uid(),title:'把甘特图倒计时做成小组件',content:'做一个可嵌入个人主页的**迷你组件**：\n\n- 显示最近一个里程碑还剩多少天\n- 用环形进度 + 渐变配色\n- 数据通过 `iframe` 或 API 暴露',tags:['前端','灵感'],seriesId:s1a,done:false,importance:1,createdAt:now-2*D,updatedAt:now-2*D},
       {id:uid(),title:'周报自动摘要工具',content:'读取一周的 git 提交与飞书消息，自动生成要点式周报草稿，减少重复劳动。',tags:['效率','自动化'],seriesId:s3,done:false,importance:2,createdAt:now-1*D,updatedAt:now-3600e3},
       {id:uid(),title:'用卡片笔记法重读《人月神话》',content:'> 每章提炼一张卡片，不追求读完，只追求每章有一个能用的结论。\n\n推荐先读 [英文版](https://en.wikipedia.org/wiki/The_Mythical_Man-Month)。',tags:['读书'],seriesId:s2,done:true,importance:0,createdAt:now-6*D,updatedAt:now-5*D}
     ],
     notes:[
       {id:uid(),title:'甘特图绘制要点',content:'- **对齐**：时间轴刻度与任务条起点像素级对齐\n- **今天线**：用红色竖线强调当前日期\n- **着色**：按系列着色，图例放底部\n- **移动端**：横向滚动，任务名列固定',url:'https://developer.mozilla.org/zh-CN/docs/Web/CSS/grid',seriesId:s1,pinned:true,createdAt:now-8*D,updatedAt:now-3*D},
-      {id:uid(),title:'卡片笔记法三条规则',content:'1. 只记自己的话，不抄原文\n2. 每张卡片只表达一个观点\n3. 新笔记必须连接到旧笔记',url:'',seriesId:s2,pinned:false,createdAt:now-10*D,updatedAt:now-4*D},
-      {id:uid(),title:'发布前检查清单',content:'| 检查项 | 说明 |\n| --- | --- |\n| 资源路径 | 使用相对路径 |\n| 移动端 | 375px 可用 |\n| 空状态 | 错误提示齐全 |',url:'',seriesId:s3,pinned:false,createdAt:now-5*D,updatedAt:now-5*D}
+      {id:uid(),title:'卡片笔记法三条规则',content:'1. 只记自己的话，不抄原文\n2. 每张卡片只表达一个观点\n3. 新笔记必须连接到旧笔记',url:'',seriesId:s2a,pinned:false,createdAt:now-10*D,updatedAt:now-4*D},
+      {id:uid(),title:'发布前检查清单',content:'| 检查项 | 说明 |\n| --- | --- |\n| 资源路径 | 使用相对路径 |\n| 移动端 | 375px 可用 |\n| 空状态 | 错误提示齐全 |',url:'',seriesId:s1aa,pinned:false,createdAt:now-5*D,updatedAt:now-5*D}
     ],
     webnotes:[
-      {id:uid(),url:'https://developer.mozilla.org/zh-CN/docs/Web/API',title:'MDN Web API 索引',excerpt:'前端 API 权威参考，查兼容性首选。',seriesId:s2,createdAt:now-12*D},
-      {id:uid(),url:'https://www.ruanyifeng.com/blog/',title:'阮一峰的网络日志',excerpt:'技术与科技观察，周刊质量稳定。',seriesId:s2,createdAt:now-9*D},
+      {id:uid(),url:'https://developer.mozilla.org/zh-CN/docs/Web/API',title:'MDN Web API 索引',excerpt:'前端 API 权威参考，查兼容性首选。',seriesId:s2a,createdAt:now-12*D},
+      {id:uid(),url:'https://www.ruanyifeng.com/blog/',title:'阮一峰的网络日志',excerpt:'技术与科技观察，周刊质量稳定。',seriesId:s2a,createdAt:now-9*D},
       {id:uid(),url:'https://github.com/trending',title:'GitHub 热门仓库',excerpt:'每天快速扫一眼行业热点与新项目。',seriesId:s1,createdAt:now-7*D}
     ],
     tasks:[
@@ -581,19 +617,61 @@ function seedData(){
 function load(){
   try{const raw=localStorage.getItem(LS_KEY);if(!raw)return null;const d=JSON.parse(raw);
     if(!d||!Array.isArray(d.series))return null;
+    d.series.forEach(s=>{if(typeof s.parentId==='undefined')s.parentId=null;});
     d.notes.forEach(n=>{if(typeof n.url==='undefined')n.url='';});
     return d;}catch(e){return null;}
 }
-function save(){try{localStorage.setItem(LS_KEY,JSON.stringify(state));}catch(e){toast('保存失败：浏览器存储不可用');}}
-state=load()||seedData();save();
+const UNDO_LIMIT=50;
+let undoStack=[];
+let restoring=false;
+let initDone=false;
+let lastSaved=null;
+function save(){
+  if(!restoring&&initDone&&lastSaved){
+    try{undoStack.push(lastSaved);if(undoStack.length>UNDO_LIMIT)undoStack.shift();}catch(e){}
+  }
+  try{
+    localStorage.setItem(LS_KEY,JSON.stringify(state));
+    lastSaved=JSON.parse(JSON.stringify(state));
+  }catch(e){
+    if(e&&e.name==='QuotaExceededError')toast('保存失败：存储空间不足，请缩小图片或删除部分内容');
+    else toast('保存失败：浏览器存储不可用');
+  }
+}
+function doUndo(){
+  if(!undoStack.length){toast('没有可撤销的操作');return;}
+  const prev=undoStack.pop();
+  restoring=true;
+  state=prev;
+  save();
+  restoring=false;
+  render();
+  toast('已撤销');
+}
+state=load()||seedData();save();initDone=true;
 
 /* ===== 派生数据 ===== */
 function seriesById(id){return state.series.find(s=>s.id===id)||null;}
+function seriesSubIds(id){
+  const out=[id];
+  const walk=sid=>{state.series.forEach(c=>{if(c.parentId===sid){out.push(c.id);walk(c.id);}});};
+  walk(id);
+  return out;
+}
 function seriesCount(id){
-  return state.ideas.filter(i=>i.seriesId===id).length
-    +state.notes.filter(n=>n.seriesId===id).length
-    +state.webnotes.filter(w=>w.seriesId===id).length
-    +state.tasks.filter(t=>t.seriesId===id).length;
+  const ids=seriesSubIds(id);
+  return state.ideas.filter(i=>ids.indexOf(i.seriesId)>=0).length
+    +state.notes.filter(n=>ids.indexOf(n.seriesId)>=0).length
+    +state.webnotes.filter(w=>ids.indexOf(w.seriesId)>=0).length
+    +state.tasks.filter(t=>ids.indexOf(t.seriesId)>=0).length;
+}
+function seriesDepth(id){let d=1,s=seriesById(id);while(s&&s.parentId){d++;s=seriesById(s.parentId);}return d;}
+function seriesChildren(id){return state.series.filter(c=>c.parentId===id);}
+function seriesOrdered(){
+  const out=[];
+  const walk=pid=>{state.series.forEach(s=>{if(s.parentId===pid){out.push(s.id);walk(s.id);}});};
+  walk(null);
+  return out;
 }
 function allEntries(){
   const arr=[];
@@ -620,7 +698,7 @@ function toast(msg){
   setTimeout(()=>el.remove(),2600);
 }
 function openModal(html){
-  $('#modal-root').innerHTML='<div class="modal-mask" id="modal-mask" onclick="if(event.target===this)closeModal()">'+html+'</div>';
+  $('#modal-root').innerHTML='<div class="modal-mask" id="modal-mask">'+html+'</div>';
   const f=$('#modal-mask input,#modal-mask textarea');if(f)setTimeout(()=>f.focus(),50);
 }
 function closeModal(){const r=$('#modal-root');if(r)r.innerHTML='';}
@@ -636,7 +714,11 @@ function confirmDialog(msg,onOk){
 }
 function seriesOptions(selId){
   let h='<option value="">无系列</option>';
-  state.series.forEach(s=>{h+='<option value="'+s.id+'"'+(s.id===selId?' selected':'')+'>'+esc(s.name)+'</option>';});
+  seriesOrdered().forEach(pid=>{
+    const s=seriesById(pid);
+    if(!s)return;
+    h+='<option value="'+s.id+'"'+(s.id===selId?' selected':'')+'>'+'　'.repeat(seriesDepth(s.id)-1)+esc(s.name)+'</option>';
+  });
   return h;
 }
 function entryMeta(e){
@@ -699,6 +781,7 @@ function afterRender(){
   const week=['日','一','二','三','四','五','六'][d.getDay()];
   today.innerHTML='<span class="full">'+d.getFullYear()+'年'+(d.getMonth()+1)+'月'+d.getDate()+'日 · 周'+week+'</span><b>'+((d.getMonth()+1)+'/'+d.getDate())+'</b>';
   if(route==='#/search')syncSearch();
+  hydrateAssets();
 }
 
 /* ===== 仪表盘 ===== */
@@ -760,7 +843,7 @@ function renderCountdown(tasks){
     return `<div class="cd-card">
       <div class="cd-ring"><svg width="54" height="54"><circle cx="27" cy="27" r="22" fill="none" stroke="var(--bg)" stroke-width="5"/><circle cx="27" cy="27" r="22" fill="none" stroke="${ringCol}" stroke-width="5" stroke-linecap="round" stroke-dasharray="${C}" stroke-dashoffset="${C*(1-pct)}"/></svg><span class="cd-num">${done?'<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="var(--accent)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" style="margin:auto"><path d="M20 6 9 17l-5-5"/></svg>':Math.abs(left)}<span class="cd-unit">${done?'':'天'}</span></span></div>
       <div class="cd-info">
-        <div class="name">${esc(t.name)}${s?'<i class="dot" style="background:'+s.color+'"></i>':''}<span class="pill ${done?'ok':overdue||hot?'soon':'ok'}">${badge}</span></div>
+        <div class="name">${esc(t.name)}${(s||t.color)?'<i class="dot" style="background:'+taskColor(t)+'"></i>':''}<span class="pill ${done?'ok':overdue||hot?'soon':'ok'}">${badge}</span></div>
         <div class="date">${esc(t.start)} → ${esc(t.end)}<span>${done?'已于 '+esc(t.end)+' 完成':fmtLeft(left)}</span></div>
         <div class="cd-bar"><i class="${hot||overdue?'hot':''}" style="width:${pct*100}%"></i></div>
       </div>
@@ -823,15 +906,17 @@ function ideaCard(i){
     </div>
   </div>`;
 }
-function openIdeaModal(id){
+function openIdeaModal(id,presetSeries){
   const i=id?state.ideas.find(x=>x.id===id):null;
   openModal(`<div class="modal">
     <div class="modal-head"><h3>${i?'编辑灵感':'记录灵感'}</h3><button class="icon-btn" onclick="closeModal()">${ICONS.del}</button></div>
     <div class="modal-body">
       <div class="field"><label>标题</label><input class="input" id="f-title" maxlength="120" placeholder="一句话描述这个想法" value="${i?esc(i.title):''}"></div>
-      <div class="field"><label>内容 <span class="hint">可选</span></label><textarea class="textarea" id="f-content" placeholder="展开描述、背景或下一步…">${i?esc(i.content):''}</textarea></div>
+      <div class="field"><label>内容 <span class="hint">可选</span></label>
+        <div class="md-toolbar"><button type="button" class="btn ghost sm" onclick="insertImg('f-content')">${ICONS.img}插入图片</button><span class="hint">支持直接粘贴截图</span></div>
+        <textarea class="textarea" id="f-content" onpaste="pasteImg(event,'f-content')" placeholder="展开描述、背景或下一步…">${i?esc(i.content):''}</textarea></div>
       <div class="form-row">
-        <div class="field"><label>系列</label><select class="select" id="f-series">${seriesOptions(i?i.seriesId:'')}</select></div>
+        <div class="field"><label>系列</label><select class="select" id="f-series">${seriesOptions(i?i.seriesId:(presetSeries||''))}</select></div>
         <div class="field"><label>标签 <span class="hint">逗号分隔</span></label><input class="input" id="f-tags" placeholder="如：前端, 灵感" value="${i?esc(i.tags.join(', ')):''}"></div>
       </div>
       <div class="field"><label>重要度</label>
@@ -852,13 +937,122 @@ function saveIdea(id){
   const title=fv('f-title');if(!title){toast('请填写标题');return;}
   const imp=+$('#f-imp .chip.on').dataset.v;
   const tags=$('#f-tags').value.split(/[,，]/).map(s=>s.trim()).filter(Boolean);
-  if(id){const i=state.ideas.find(x=>x.id===id);Object.assign(i,{title,content:fv('f-content'),tags,seriesId:fv('f-series')||null,importance:imp,updatedAt:Date.now()});}
-  else{state.ideas.unshift({id:uid(),title,content:fv('f-content'),tags,seriesId:fv('f-series')||null,done:false,importance:imp,createdAt:Date.now(),updatedAt:Date.now()});}
+  const content=fv('f-content');
+  if(id){const i=state.ideas.find(x=>x.id===id);Object.assign(i,{title,content,tags,seriesId:fv('f-series')||null,importance:imp,updatedAt:Date.now()});}
+  else{state.ideas.unshift({id:uid(),title,content,tags,seriesId:fv('f-series')||null,done:false,importance:imp,createdAt:Date.now(),updatedAt:Date.now()});}
   save();closeModal();render();toast(id?'灵感已更新':'灵感已记录');
 }
 function toggleIdea(id){const i=state.ideas.find(x=>x.id===id);i.done=!i.done;i.updatedAt=Date.now();save();render();}
 function delIdea(id){confirmDialog('删除这条灵感？',()=>{state.ideas=state.ideas.filter(x=>x.id!==id);save();render();toast('已删除');});}
 function fv(id){return $('#'+id).value.trim();}
+/* ===== 图片：压缩后存 IndexedDB，内容仅存占位符 asset:id ===== */
+let dbPromise=null;
+function idb(){
+  if(dbPromise)return dbPromise;
+  dbPromise=new Promise((res,rej)=>{
+    const rq=indexedDB.open('idea-studio-db',1);
+    rq.onupgradeneeded=()=>{const db=rq.result;if(!db.objectStoreNames.contains('images'))db.createObjectStore('images');};
+    rq.onsuccess=()=>res(rq.result);
+    rq.onerror=()=>{dbPromise=null;rej(rq.error);};
+  });
+  return dbPromise;
+}
+function idbPut(id,blob){
+  return idb().then(db=>new Promise((res,rej)=>{const tx=db.transaction('images','readwrite');tx.objectStore('images').put(blob,id);tx.oncomplete=()=>res();tx.onerror=()=>rej(tx.error);}));
+}
+function idbGet(id){
+  return idb().then(db=>new Promise((res,rej)=>{const rq=db.transaction('images').objectStore('images').get(id);rq.onsuccess=()=>res(rq.result||null);rq.onerror=()=>rej(rq.error);}));
+}
+function idbDel(id){
+  return idb().then(db=>new Promise((res,rej)=>{const tx=db.transaction('images','readwrite');tx.objectStore('images').delete(id);tx.oncomplete=()=>res();tx.onerror=()=>rej(tx.error);}));
+}
+function idbClear(){
+  return idb().then(db=>new Promise((res,rej)=>{const tx=db.transaction('images','readwrite');tx.objectStore('images').clear();tx.oncomplete=()=>res();tx.onerror=()=>rej(tx.error);}));
+}
+function imgToBlob(f,cb){
+  const fr=new FileReader();
+  fr.onload=()=>{
+    const img=new Image();
+    img.onload=()=>{
+      const MAX=1600;
+      if(Math.max(img.width,img.height)<=MAX&&f.size<=400*1024){cb(f);return;}
+      const sc=Math.min(1,MAX/Math.max(img.width,img.height));
+      const w=Math.max(1,Math.round(img.width*sc)),h=Math.max(1,Math.round(img.height*sc));
+      const c=document.createElement('canvas');c.width=w;c.height=h;
+      c.getContext('2d').drawImage(img,0,0,w,h);
+      c.toBlob(b=>cb(b),f.type==='image/png'?'image/png':'image/jpeg',0.85);
+    };
+    img.onerror=()=>cb(null);
+    img.src=fr.result;
+  };
+  fr.onerror=()=>cb(null);
+  fr.readAsDataURL(f);
+}
+function insertImg(taId){
+  const inp=document.createElement('input');
+  inp.type='file';inp.accept='image/*';
+  inp.onchange=()=>{
+    const f=inp.files&&inp.files[0];if(!f)return;
+    imgToBlob(f,blob=>{
+      if(!blob){toast('图片处理失败');return;}
+      const id='img_'+Date.now().toString(36)+Math.random().toString(36).slice(2,8);
+      idbPut(id,blob).then(()=>{insertImgAt(taId,'![图片](asset:'+id+')');toast('图片已插入');}).catch(()=>toast('图片保存失败'));
+    });
+  };
+  inp.click();
+}
+function pasteImg(e,taId){
+  const items=(e.clipboardData&&e.clipboardData.items)||[];
+  for(const it of items){
+    if(it.type&&it.type.indexOf('image')===0){
+      const f=it.getAsFile();
+      if(f){
+        e.preventDefault();
+        imgToBlob(f,blob=>{
+          if(!blob){toast('图片处理失败');return;}
+          const id='img_'+Date.now().toString(36)+Math.random().toString(36).slice(2,8);
+          idbPut(id,blob).then(()=>{insertImgAt(taId,'![图片](asset:'+id+')');toast('图片已插入');}).catch(()=>toast('图片保存失败'));
+        });
+      }
+      return;
+    }
+  }
+}
+function insertImgAt(taId,ins){
+  const ta=$('#'+taId);if(!ta)return;
+  const pos=ta.selectionStart||ta.value.length;
+  const end=ta.selectionEnd||pos;
+  ta.value=ta.value.slice(0,pos)+ins+ta.value.slice(end);
+  ta.focus();const np=pos+ins.length;ta.setSelectionRange(np,np);
+}
+const assetCache={};
+function hydrateAssets(){
+  const imgs=document.querySelectorAll('img[data-asset]');
+  imgs.forEach(im=>{
+    const id=im.getAttribute('data-asset');
+    if(assetCache[id]){im.src=assetCache[id];im.removeAttribute('data-asset');return;}
+    idbGet(id).then(b=>{
+      if(!b){im.outerHTML='<span class="muted" style="font-size:12px">[图片已删除]</span>';return;}
+      const url=URL.createObjectURL(b);
+      assetCache[id]=url;
+      im.src=url;im.removeAttribute('data-asset');
+    }).catch(()=>{});
+  });
+}
+function collectAssets(content,set){
+  if(!content)return;
+  const re=/asset:([A-Za-z0-9_]+)/g;let m;
+  while((m=re.exec(content)))set.add(m[1]);
+}
+function blobToB64(b){
+  return new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result.split(',')[1]);r.onerror=()=>rej(r.error);r.readAsDataURL(b);});
+}
+function b64ToBlob(b64,type){
+  const bin=atob(b64);
+  const u8=new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++)u8[i]=bin.charCodeAt(i);
+  return new Blob([u8],{type:type||'image/png'});
+}
 
 /* ===== 笔记视图 ===== */
 let noteSeriesFilter='';
@@ -871,7 +1065,7 @@ function viewNotes(){
     <div class="spacer"></div>
     <select class="select filter-select" onchange="noteSeriesFilter=this.value;render()">
       <option value="">全部系列</option>
-      ${state.series.map(s=>'<option value="'+s.id+'"'+(noteSeriesFilter===s.id?' selected':'')+'>'+esc(s.name)+'</option>').join('')}
+      ${seriesOrdered().map(pid=>{const s=seriesById(pid);if(!s)return '';return '<option value="'+s.id+'"'+(noteSeriesFilter===s.id?' selected':'')+'>'+'　'.repeat(seriesDepth(s.id)-1)+esc(s.name)+'</option>';}).join('')}
     </select>
     <button class="btn ghost sm" onclick="navigate('#/search')">${ICONS.search}搜索</button>
   </div>
@@ -893,16 +1087,18 @@ function noteCard(n){
     </div>
   </div>`;
 }
-function openNoteModal(id){
+function openNoteModal(id,presetSeries){
   const n=id?state.notes.find(x=>x.id===id):null;
   openModal(`<div class="modal">
     <div class="modal-head"><h3>${n?'编辑笔记':'新建笔记'}</h3><button class="icon-btn" onclick="closeModal()">${ICONS.del}</button></div>
     <div class="modal-body">
       <div class="field"><label>标题</label><input class="input" id="f-title" maxlength="120" placeholder="笔记标题" value="${n?esc(n.title):''}"></div>
-      <div class="field"><label>内容</label><textarea class="textarea" id="f-content" style="min-height:180px" placeholder="正文…">${n?esc(n.content):''}</textarea></div>
+      <div class="field"><label>内容</label>
+        <div class="md-toolbar"><button type="button" class="btn ghost sm" onclick="insertImg('f-content')">${ICONS.img}插入图片</button><span class="hint">支持直接粘贴截图</span></div>
+        <textarea class="textarea" id="f-content" onpaste="pasteImg(event,'f-content')" style="min-height:180px" placeholder="正文…">${n?esc(n.content):''}</textarea></div>
       <div class="field"><label>来源网址 <span class="hint">可选 · 摘录自某篇博客或文章时填写</span></label><input class="input" id="f-url" placeholder="https://…" value="${n?esc(n.url||''):''}"></div>
       <div class="form-row">
-        <div class="field"><label>系列</label><select class="select" id="f-series">${seriesOptions(n?n.seriesId:'')}</select></div>
+        <div class="field"><label>系列</label><select class="select" id="f-series">${seriesOptions(n?n.seriesId:(presetSeries||''))}</select></div>
         <div class="field"><label>置顶</label><label style="display:flex;align-items:center;gap:8px;font-size:14px;padding-top:9px;cursor:pointer"><input type="checkbox" id="f-pin" ${n&&n.pinned?'checked':''} style="width:17px;height:17px;accent-color:var(--accent)"> 在列表中优先显示</label></div>
       </div>
       <div class="modal-foot"><button class="btn ghost" onclick="closeModal()">取消</button><button class="btn" onclick="saveNote('${id||''}')">保存</button></div>
@@ -913,8 +1109,9 @@ function saveNote(id){
   const title=fv('f-title');if(!title){toast('请填写标题');return;}
   const url=fv('f-url');
   if(url&&!/^https?:\/\//i.test(url)){toast('来源网址需以 http:// 或 https:// 开头');return;}
-  if(id){const n=state.notes.find(x=>x.id===id);Object.assign(n,{title,content:fv('f-content'),url,seriesId:fv('f-series')||null,pinned:$('#f-pin').checked,updatedAt:Date.now()});}
-  else{state.notes.unshift({id:uid(),title,content:fv('f-content'),url,seriesId:fv('f-series')||null,pinned:$('#f-pin').checked,createdAt:Date.now(),updatedAt:Date.now()});}
+  const content=fv('f-content');
+  if(id){const n=state.notes.find(x=>x.id===id);Object.assign(n,{title,content,url,seriesId:fv('f-series')||null,pinned:$('#f-pin').checked,updatedAt:Date.now()});}
+  else{state.notes.unshift({id:uid(),title,content,url,seriesId:fv('f-series')||null,pinned:$('#f-pin').checked,createdAt:Date.now(),updatedAt:Date.now()});}
   save();closeModal();render();toast(id?'笔记已更新':'笔记已保存');
 }
 function openNoteDetail(id){
@@ -928,6 +1125,7 @@ function openNoteDetail(id){
       <div class="modal-foot" style="margin-top:18px"><button class="btn ghost" onclick="closeModal()">关闭</button><button class="btn" onclick="closeModal();openNoteModal('${n.id}')">编辑</button></div>
     </div>
   </div>`);
+  hydrateAssets();
 }
 function togglePin(id){const n=state.notes.find(x=>x.id===id);n.pinned=!n.pinned;n.updatedAt=Date.now();save();render();}
 function delNote(id){confirmDialog('删除这篇笔记？',()=>{state.notes=state.notes.filter(x=>x.id!==id);save();render();toast('已删除');});}
@@ -942,7 +1140,7 @@ function viewWebnotes(){
     <div class="spacer"></div>
     <select class="select filter-select" onchange="webSeriesFilter=this.value;render()">
       <option value="">全部系列</option>
-      ${state.series.map(s=>'<option value="'+s.id+'"'+(webSeriesFilter===s.id?' selected':'')+'>'+esc(s.name)+'</option>').join('')}
+      ${seriesOrdered().map(pid=>{const s=seriesById(pid);if(!s)return '';return '<option value="'+s.id+'"'+(webSeriesFilter===s.id?' selected':'')+'>'+'　'.repeat(seriesDepth(s.id)-1)+esc(s.name)+'</option>';}).join('')}
     </select>
     <button class="btn ghost sm" onclick="navigate('#/search')">${ICONS.search}搜索</button>
   </div>
@@ -1006,18 +1204,16 @@ function viewGantt(){
   const grid=ganttGrid(tasks);
   const labels='<div class="gantt-row g-head" style="height:34px;background:var(--bg)"><span style="font-size:12px;font-weight:600;color:var(--muted)">任务</span></div>'
     +tasks.map(t=>{
-      const s=seriesById(t.seriesId);
       const r=taskDaysLeft(t);
       const leftPill=r.left<0?'<span class="pill soon">已超 '+(-r.left)+' 天</span>':r.left<=7?'<span class="pill soon">剩 '+r.left+' 天</span>':'<span class="pill ok">剩 '+r.left+' 天</span>';
       return `<div class="gantt-row" onclick="openTaskModal('${t.id}')">
-        <i class="dot" style="background:${s?s.color:'#8A93A5'}"></i>
+        <i class="dot" style="background:${taskColor(t)}"></i>
         <span class="g-name">${esc(t.name)}</span>
         <span class="g-sdate">${t.start.slice(5)}</span>${leftPill}
       </div>`;
     }).join('');
   const tracks=tasks.map(t=>{
-    const s=seriesById(t.seriesId);
-    const col=s?s.color:'#8A93A5';
+    const col=taskColor(t);
     const left=grid.pct((parseDay(t.start)-grid.min)/D),w=grid.pctW(t.start,t.end);
     const r=taskDaysLeft(t);
     const done=r.finished?' done':'';
@@ -1028,7 +1224,7 @@ function viewGantt(){
       </div>
     </div>`;
   }).join('');
-  const legend=state.series.map(s=>'<span><i class="dot" style="background:'+s.color+'"></i>'+esc(s.name)+'</span>').join('');
+  const legend=tasks.map(t=>'<span><i class="dot" style="background:'+taskColor(t)+'"></i>'+esc(t.name)+'</span>').join('');
   return `<div class="gantt-wrap">${head}
     <div class="gantt-scroll" style="overflow-x:auto">
       <div class="gantt">
@@ -1079,6 +1275,11 @@ function ganttGrid(tasks){
   cellsHTML+='</div>';
   return {min,max,totalDays,cells,cellW,pct,pctW,todayPct,headHTML,cellsHTML};
 }
+function taskColor(t){
+  if(t&&t.color)return t.color;
+  const s=t?seriesById(t.seriesId):null;
+  return s?s.color:'#8A93A5';
+}
 function openTaskModal(id){
   const t=id?state.tasks.find(x=>x.id===id):null;
   const td=todayStr();
@@ -1087,25 +1288,37 @@ function openTaskModal(id){
     <div class="modal-body">
       <div class="field"><label>任务名称</label><input class="input" id="f-name" maxlength="80" placeholder="如：上线新版首页" value="${t?esc(t.name):''}"></div>
       <div class="form-row">
-        <div class="field"><label>开始日期</label><input class="input" type="date" id="f-start" value="${t?t.start:td}"></div>
-        <div class="field"><label>结束日期</label><input class="input" type="date" id="f-end" value="${t?t.end:td}"></div>
+        <div class="field"><label>开始日期</label><input class="input" type="text" id="f-start" placeholder="2023-05-04 / 2023.05.04" value="${t?t.start:td}"></div>
+        <div class="field"><label>结束日期</label><input class="input" type="text" id="f-end" placeholder="2023-05-04 / 2023.05.04" value="${t?t.end:td}"></div>
       </div>
       <div class="field"><label>进度</label><div class="range-wrap"><input type="range" id="f-prog" min="0" max="100" step="5" value="${t?t.progress:0}"><output id="f-prog-out">${t?t.progress:0}%</output></div></div>
       <div class="field"><label>系列</label><select class="select" id="f-series">${seriesOptions(t?t.seriesId:'')}</select></div>
+      <div class="field"><label>颜色 <span class="hint">不选则跟随所属系列颜色</span></label>
+        <div class="color-pick" id="f-color">
+          <button type="button" class="color-dot${t&&t.color?'':' on'}" data-v="" title="跟随系列" style="background:linear-gradient(135deg,#8A93A5,#C9CFD9)"></button>
+          ${SERIES_COLORS.map(c=>'<button type="button" class="color-dot'+(t&&t.color===c?' on':'')+'" data-v="'+c+'" title="'+c+'" style="background:'+c+'"></button>').join('')}
+        </div>
+      </div>
       <div class="field"><label>备注 <span class="hint">可选</span></label><textarea class="textarea" id="f-note" style="min-height:60px" placeholder="阶段目标、依赖、注意事项…">${t?esc(t.note||''):''}</textarea></div>
       <div class="modal-foot">${id?'<button class="btn danger" style="margin-right:auto" onclick="delTask(\''+id+'\')">'+ICONS.del+'删除</button>':''}<button class="btn ghost" onclick="closeModal()">取消</button><button class="btn" onclick="saveTask('${id||''}')">保存</button></div>
     </div>
   </div>`);
   const prog=$('#f-prog');if(prog)prog.addEventListener('input',()=>{$('#f-prog-out').textContent=prog.value+'%';});
+  $$('#f-color .color-dot').forEach(d=>d.addEventListener('click',()=>{
+    $$('#f-color .color-dot').forEach(x=>x.classList.remove('on'));
+    d.classList.add('on');
+  }));
 }
 function saveTask(id){
   const name=fv('f-name');if(!name){toast('请填写任务名称');return;}
-  const start=$('#f-start').value,end=$('#f-end').value;
-  if(!start||!end){toast('请选择起止日期');return;}
+  const start=parseDate($('#f-start').value),end=parseDate($('#f-end').value);
+  if(!start||!end){toast('日期格式不正确，支持 2023-05-04、2023.05.04、2023/05/04');return;}
   if(parseDay(end)<parseDay(start)){toast('结束日期不能早于开始日期');return;}
   const progress=+$('#f-prog').value;
-  if(id){const t=state.tasks.find(x=>x.id===id);Object.assign(t,{name,start,end,progress,seriesId:fv('f-series')||null,note:fv('f-note')});}
-  else{state.tasks.push({id:uid(),name,start,end,progress,seriesId:fv('f-series')||null,note:fv('f-note'),createdAt:Date.now()});}
+  const colorEl=$('#f-color .color-dot.on');
+  const color=colorEl?colorEl.dataset.v:'';
+  if(id){const t=state.tasks.find(x=>x.id===id);Object.assign(t,{name,start,end,progress,seriesId:fv('f-series')||null,note:fv('f-note'),color});}
+  else{state.tasks.push({id:uid(),name,start,end,progress,seriesId:fv('f-series')||null,note:fv('f-note'),color,createdAt:Date.now()});}
   save();closeModal();render();toast(id?'任务已更新':'任务已创建');
 }
 function delTask(id){confirmDialog('删除这个任务？',()=>{state.tasks=state.tasks.filter(x=>x.id!==id);save();render();toast('已删除');});}
@@ -1118,19 +1331,21 @@ function viewSeries(){
     <div class="spacer"></div>
     <button class="btn ghost sm" onclick="navigate('#/search')">${ICONS.search}搜索</button>
   </div>
-  ${state.series.length?`<div class="series-grid">${state.series.map(seriesCard).join('')}</div>`:emptyBox('还没有系列','系列用来把灵感、笔记、网站和任务组织成一条线索，例如「个人项目」「读书计划」。','#/series','去创建')}`;
+  ${state.series.length?`<div class="series-grid">${state.series.filter(s=>!s.parentId).map(seriesCard).join('')}</div>`:emptyBox('还没有系列','系列用来把灵感、笔记、网站和任务组织成一条线索，例如「个人项目」「读书计划」。','#/series','去创建')}`;
 }
 function seriesCard(s){
   const cnt=seriesCount(s.id);
+  const kids=seriesChildren(s.id);
   const parts=[
     ['灵感',state.ideas.filter(i=>i.seriesId===s.id).length],
     ['笔记',state.notes.filter(n=>n.seriesId===s.id).length],
     ['书签',state.webnotes.filter(w=>w.seriesId===s.id).length],
     ['任务',state.tasks.filter(t=>t.seriesId===s.id).length]
   ].filter(p=>p[1]>0);
-  return `<div class="series-card" onclick="navigate('#/series/${s.id}')">
-    <div class="s-top"><i class="dot" style="width:14px;height:14px;background:${s.color}"></i><span class="s-name">${esc(s.name)}</span><span class="s-count">${cnt} 条内容</span></div>
+  return `<div class="series-card">
+    <div class="s-top" onclick="navigate('#/series/${s.id}')"><i class="dot" style="width:14px;height:14px;background:${s.color}"></i><span class="s-name">${esc(s.name)}</span><span class="s-count">${cnt} 条内容</span></div>
     ${s.desc?'<div class="s-desc">'+esc(s.desc)+'</div>':''}
+    ${kids.length?`<div class="s-kids">${kids.map(k=>seriesSubRow(k)).join('')}</div>`:''}
     <div class="s-foot">
       ${parts.map(p=>'<span class="pill" style="background:var(--bg);color:var(--ink-2)">'+p[0]+' '+p[1]+'</span>').join('')||'<span class="pill" style="background:var(--bg);color:var(--faint)">暂无内容</span>'}
     </div>
@@ -1140,6 +1355,15 @@ function seriesCard(s){
     </div>
   </div>`;
 }
+function seriesSubRow(s){
+  const kids=seriesChildren(s.id);
+  return `<div class="s-sub" onclick="event.stopPropagation();navigate('#/series/${s.id}')">
+    <i class="dot" style="width:10px;height:10px;background:${s.color}"></i>
+    <span class="s-sub-name">${esc(s.name)}</span>
+    <span class="s-count">${seriesCount(s.id)}</span>
+    ${kids.length?`<div class="s-sub-kids">${kids.map(k=>seriesSubRow(k)).join('')}</div>`:''}
+  </div>`;
+}
 function openSeriesModal(id){
   const s=id?seriesById(id):null;
   const swatches=SERIES_COLORS.map(c=>'<button type="button" class="swatch'+(s&&s.color===c?' on':'')+'" style="background:'+c+'" data-c="'+c+'" onclick="pickColor(this)"></button>').join('');
@@ -1147,6 +1371,7 @@ function openSeriesModal(id){
     <div class="modal-head"><h3>${s?'编辑系列':'新建系列'}</h3><button class="icon-btn" onclick="closeModal()">${ICONS.del}</button></div>
     <div class="modal-body">
       <div class="field"><label>名称</label><input class="input" id="f-name" maxlength="40" placeholder="如：个人项目" value="${s?esc(s.name):''}"></div>
+      <div class="field"><label>父系列 <span class="hint">可选 · 最多嵌套 3 层</span></label><select class="select" id="f-parent">${parentOptions(id)}</select></div>
       <div class="field"><label>描述 <span class="hint">可选</span></label><input class="input" id="f-desc" maxlength="120" placeholder="一句话说明这个系列的线索" value="${s?esc(s.desc||''):''}"></div>
       <div class="field"><label>颜色</label><div class="filter-group" id="f-colors" style="gap:8px">${swatches}</div></div>
       <div class="modal-foot"><button class="btn ghost" onclick="closeModal()">取消</button><button class="btn" onclick="saveSeries('${id||''}')">保存</button></div>
@@ -1154,29 +1379,67 @@ function openSeriesModal(id){
   </div>`);
   if(!s)$('#f-colors .swatch').classList.add('on');
 }
+function parentOptions(curId){
+  const s=curId?seriesById(curId):null;
+  const curParent=s?s.parentId:null;
+  const forbid=curId?seriesSubIds(curId):[];
+  let h='<option value="">无（顶层系列）</option>';
+  seriesOrdered().forEach(pid=>{
+    if(forbid.indexOf(pid)>=0)return;
+    const p=seriesById(pid);
+    if(!p||seriesDepth(pid)>=3)return;
+    h+='<option value="'+p.id+'"'+(curParent===p.id?' selected':'')+'>'+'　'.repeat(seriesDepth(p.id)-1)+esc(p.name)+'</option>';
+  });
+  return h;
+}
 function pickColor(el){$$('#f-colors .swatch').forEach(c=>c.classList.remove('on'));el.classList.add('on');}
 function saveSeries(id){
   const name=fv('f-name');if(!name){toast('请填写系列名称');return;}
   const color=$('#f-colors .swatch.on').dataset.c;
-  if(id){const s=seriesById(id);Object.assign(s,{name,desc:fv('f-desc'),color});}
-  else{state.series.push({id:uid(),name,desc:fv('f-desc'),color,createdAt:Date.now()});}
+  const parentId=fv('f-parent')||null;
+  if(parentId){
+    if(parentId===id){toast('不能把自己设为父系列');return;}
+    if(seriesSubIds(id).indexOf(parentId)>=0){toast('不能选择自己的子系列作为父系列');return;}
+    if(seriesDepth(parentId)>=3){toast('系列最多嵌套 3 层');return;}
+  }
+  if(id){const s=seriesById(id);Object.assign(s,{name,desc:fv('f-desc'),color,parentId});}
+  else{state.series.push({id:uid(),name,desc:fv('f-desc'),color,parentId,createdAt:Date.now()});}
   save();closeModal();render();toast(id?'系列已更新':'系列已创建');
 }
 function delSeries(id){
   const cnt=seriesCount(id);
+  const kids=seriesChildren(id).length;
   const doDel=()=>{
     state.series=state.series.filter(s=>s.id!==id);
+    state.series.forEach(s=>{if(s.parentId===id)s.parentId=null;});
     state.ideas.forEach(i=>{if(i.seriesId===id)i.seriesId=null;});
     state.notes.forEach(n=>{if(n.seriesId===id)n.seriesId=null;});
     state.webnotes.forEach(w=>{if(w.seriesId===id)w.seriesId=null;});
     state.tasks.forEach(t=>{if(t.seriesId===id)t.seriesId=null;});
     save();render();toast('系列已删除');
   };
-  if(cnt>0){confirmDialog('删除该系列会同时解除其中 '+cnt+' 条内容的归属（内容本身不会被删除）。继续？',doDel);return;}
+  if(cnt>0||kids>0){
+    let msg='删除该系列会同时解除其中 '+cnt+' 条内容的归属（内容本身不会被删除）。';
+    if(kids>0)msg+='其 '+kids+' 个子系列将提升为顶层系列。';
+    confirmDialog(msg,doDel);return;
+  }
   doDel();
+}
+function toggleDrop(e,id){
+  if(e)e.stopPropagation();
+  const m=document.getElementById(id);if(!m)return;
+  document.querySelectorAll('.drop-menu').forEach(x=>{if(x!==m)x.classList.remove('open');});
+  m.classList.toggle('open');
+}
+function dropAdd(kind,seriesId){
+  document.querySelectorAll('.drop-menu').forEach(x=>x.classList.remove('open'));
+  if(kind==='idea')openIdeaModal('',seriesId);
+  else if(kind==='note')openNoteModal('',seriesId);
 }
 function viewSeriesDetail(id){
   const s=seriesById(id);if(!s){return '<div class="empty">系列不存在</div>';}
+  const parent=s.parentId?seriesById(s.parentId):null;
+  const kids=seriesChildren(id);
   const ideas=state.ideas.filter(i=>i.seriesId===id);
   const notes=state.notes.filter(n=>n.seriesId===id);
   const webs=state.webnotes.filter(w=>w.seriesId===id);
@@ -1186,7 +1449,14 @@ function viewSeriesDetail(id){
     <button class="btn ghost sm" onclick="navigate('#/series')">← 全部系列</button>
     <div class="spacer"></div>
     <button class="btn ghost sm" onclick="openSeriesModal('${id}')">编辑系列</button>
-    <button class="btn sm" onclick="openIdeaModal()">${ICONS.plus}添加内容</button>
+    <button class="btn ghost sm" style="color:var(--danger);border-color:var(--danger)" onclick="delSeries('${id}')">删除系列</button>
+    <div class="drop">
+      <button class="btn sm" onclick="toggleDrop(event,'sd-add')">${ICONS.plus}添加内容<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="width:13px;height:13px;margin-left:2px"><path d="m6 9 6 6 6-6"/></svg></button>
+      <div class="drop-menu" id="sd-add">
+        <button type="button" onclick="dropAdd('idea','${id}')">${ICONS.idea}灵感</button>
+        <button type="button" onclick="dropAdd('note','${id}')">${ICONS.note}笔记</button>
+      </div>
+    </div>
   </div>
   <div class="section">
     <div class="entry" style="box-shadow:none">
@@ -1194,9 +1464,11 @@ function viewSeriesDetail(id){
       <div class="body">
         <div class="title"><span class="t">${esc(s.name)}</span><span class="pill" style="background:${s.color}1a;color:${s.color}">${seriesCount(id)} 条内容</span></div>
         ${s.desc?'<div class="content">'+esc(s.desc)+'</div>':''}
+        <div class="meta">${parent?'<span style="cursor:pointer" onclick="navigate(\'#/series/'+parent.id+'\')">父系列：'+esc(parent.name)+'</span>':''}${kids.length?'<span>'+kids.length+' 个子系列</span>':''}</div>
       </div>
     </div>
   </div>
+  ${kids.length?`<div class="section"><div class="section-head"><h2>${ICONS.folder} 子系列<span style="font-size:12px;color:var(--muted);font-weight:400">${kids.length}</span></h2></div><div class="cards vertical">${kids.map(k=>seriesSubRow(k)).join('')}</div></div>`:''}
   ${group('灵感',ICONS.idea,ideas,i=>ideaCard(i),true)}
   ${group('笔记',ICONS.note,notes,n=>noteCard(n),true)}
   ${group('书签',ICONS.web,webs,w=>webCard(w))}
@@ -1204,10 +1476,9 @@ function viewSeriesDetail(id){
   ${!ideas.length&&!notes.length&&!webs.length&&!tasks.length?emptyBox('这个系列还没有内容','从任意页面新建内容时选择「'+esc(s.name)+'」，就会汇总到这里。','#/ideas','去记录'):''}`;
 }
 function taskRow(t){
-  const s=seriesById(t.seriesId);
   const r=taskDaysLeft(t);
   return `<div class="entry" style="cursor:pointer" onclick="openTaskModal('${t.id}')">
-    <span class="rail on" style="background:${s?s.color:'var(--line)'}"></span>
+    <span class="rail on" style="background:${taskColor(t)}"></span>
     <div class="body">
       <div class="title"><span class="t">${esc(t.name)}</span><span class="pill ${r.left<0?'soon':r.left<=7?'soon':'ok'}">${fmtLeft(r.left)}</span></div>
       <div class="meta">${esc(t.start)} → ${esc(t.end)}<span>进度 ${t.progress}%</span></div>
@@ -1271,8 +1542,17 @@ function initEvents(){
     if(item&&item.dataset.route)navigate(item.dataset.route);
   });
   $('#view').addEventListener('click',e=>{if(!e.target.closest('.sidebar')&&!e.target.closest('#sidebar'))closeSidebar();});
+  document.addEventListener('click',()=>{
+    document.querySelectorAll('.drop-menu.open').forEach(x=>x.classList.remove('open'));
+  });
   document.addEventListener('keydown',e=>{
     if(e.key==='Escape'){closeModal();closeSidebar();}
+    if((e.ctrlKey||e.metaKey)&&!e.shiftKey&&e.key.toLowerCase()==='z'){
+      const el=document.activeElement;
+      const tag=el?(el.tagName||''):'';
+      if(tag==='INPUT'||tag==='TEXTAREA'||(el&&el.isContentEditable))return;
+      e.preventDefault();doUndo();
+    }
   });
   const gs=$('#global-search');
   let t=null;
@@ -1281,7 +1561,10 @@ function initEvents(){
   $('#btn-export').addEventListener('click',exportData);
   $('#btn-import').addEventListener('click',()=>$('#file-import').click());
   $('#btn-reset').addEventListener('click',()=>{
-    confirmDialog('将清空当前全部数据并恢复为示例数据，确定？',()=>{state=seedData();save();render();toast('已恢复示例数据');});
+    confirmDialog('将清空当前全部数据并恢复为示例数据，确定？',()=>{
+      idbClear().catch(()=>{});
+      state=seedData();save();render();toast('已恢复示例数据');
+    });
   });
   const fi=document.createElement('input');
   fi.type='file';fi.id='file-import';fi.accept='application/json,.json';fi.style.display='none';
@@ -1293,9 +1576,15 @@ function initEvents(){
         const d=JSON.parse(rd.result);
         if(!d||!Array.isArray(d.series)||!Array.isArray(d.ideas)||!Array.isArray(d.notes)||!Array.isArray(d.webnotes)||!Array.isArray(d.tasks))throw new Error('bad');
         confirmDialog('导入将覆盖当前全部数据，确定继续？',()=>{
-          state=d;
-          state.notes.forEach(n=>{if(typeof n.url==='undefined')n.url='';});
-          save();render();toast('导入成功');
+          const imgs=(d&&d.__images)||{};
+          idbClear().then(()=>{
+            const jobs=Object.keys(imgs).map(id=>idbPut(id,b64ToBlob(imgs[id].b,imgs[id].t)).catch(()=>{}));
+            return Promise.all(jobs);
+          }).then(()=>{
+            state=d;
+            state.notes.forEach(n=>{if(typeof n.url==='undefined')n.url='';});
+            save();render();toast('导入成功'+(Object.keys(imgs).length?'（含 '+Object.keys(imgs).length+' 张图片）':''));
+          }).catch(()=>toast('导入成功，但图片恢复失败'));
         });
       }catch(err){toast('导入失败：文件格式不正确');}
     };
@@ -1303,14 +1592,23 @@ function initEvents(){
   });
   document.body.appendChild(fi);
 }
-function exportData(){
-  const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json;charset=utf-8'});
+async function exportData(){
+  toast('正在打包备份…');
+  const refs=new Set();
+  state.ideas.forEach(x=>collectAssets(x.content,refs));
+  state.notes.forEach(x=>collectAssets(x.content,refs));
+  const images={};
+  for(const id of refs){
+    try{const b=await idbGet(id);if(b)images[id]={t:b.type,b:await blobToB64(b)};}catch(e){}
+  }
+  const payload=Object.assign({},state,{__images:images});
+  const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json;charset=utf-8'});
   const a=document.createElement('a');
   a.href=URL.createObjectURL(blob);
   a.download='灵感工作台-备份-'+todayStr()+'.json';
   document.body.appendChild(a);a.click();
   setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},300);
-  toast('已导出备份文件');
+  toast('已导出备份文件'+(refs.size?'（含 '+refs.size+' 张图片）':''));
 }
 
 /* ===== 初始化 ===== */
