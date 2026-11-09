@@ -394,6 +394,13 @@ input[type="range"]{accent-color:var(--accent)}
 .s-sub .s-sub-name{flex:1;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
 .s-sub .s-count{font-size:12px;color:var(--faint);flex:0 0 auto}
 .s-sub-kids{margin-left:12px;border-left:2px solid var(--line);padding-left:10px;display:flex;flex-direction:column;gap:2px;width:100%}
+.series-card[draggable="true"],.s-sub[draggable="true"],.s-grip[draggable="true"]{cursor:grab}
+.series-card.dragging,.s-sub.dragging{opacity:.45}
+.series-card.drag-over,.s-sub.drag-over{outline:2px dashed var(--accent);outline-offset:-2px}
+.s-grip{display:inline-flex;align-items:center;justify-content:center;color:var(--faint);flex:0 0 auto;cursor:grab}
+.s-grip svg{width:13px;height:13px}
+.s-sub .s-grip svg{width:11px;height:11px}
+.series-card:hover .s-grip,.s-sub:hover .s-grip{color:var(--ink-2)}
 
 /* ===== 网站笔记 ===== */
 .web-card .favicon{width:38px;height:38px;flex:0 0 38px;border-radius:9px;background:var(--bg);display:flex;align-items:center;justify-content:center;border:1px solid var(--line);overflow:hidden}
@@ -600,7 +607,8 @@ const ICONS={
   search:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>',
   folder:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>',
   inbox:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.5 5h13l3.5 7v5a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-5z"/></svg>',
-  img:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>'
+  img:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>',
+  grip:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="9" cy="6" r="1.3"/><circle cx="15" cy="6" r="1.3"/><circle cx="9" cy="12" r="1.3"/><circle cx="15" cy="12" r="1.3"/><circle cx="9" cy="18" r="1.3"/><circle cx="15" cy="18" r="1.3"/></svg>'
 };
 
 /* ===== 数据与存储 ===== */
@@ -680,9 +688,21 @@ function doUndo(){
   render();
   toast('已撤销');
 }
-state=load()||seedData();save();initDone=true;
+state=load()||seedData();normalizeSeriesOrder();save();initDone=true;
 
 /* ===== 派生数据 ===== */
+function normalizeSeriesOrder(){
+  const groups={};
+  state.series.forEach(s=>{if(typeof s.parentId==='undefined')s.parentId=null;const k=s.parentId||'_root';(groups[k]=groups[k]||[]).push(s);});
+  Object.keys(groups).forEach(k=>{
+    const arr=groups[k].slice().sort((a,b)=>{
+      const ao=typeof a.order==='number'?a.order:Number.MAX_SAFE_INTEGER;
+      const bo=typeof b.order==='number'?b.order:Number.MAX_SAFE_INTEGER;
+      return (ao-bo)||((a.createdAt||0)-(b.createdAt||0));
+    });
+    arr.forEach((s,i)=>{s.order=i;});
+  });
+}
 function seriesById(id){return state.series.find(s=>s.id===id)||null;}
 function seriesSubIds(id){
   const out=[id];
@@ -698,12 +718,61 @@ function seriesCount(id){
     +state.tasks.filter(t=>ids.indexOf(t.seriesId)>=0).length;
 }
 function seriesDepth(id){let d=1,s=seriesById(id);while(s&&s.parentId){d++;s=seriesById(s.parentId);}return d;}
-function seriesChildren(id){return state.series.filter(c=>c.parentId===id);}
+function seriesChildren(id){
+  const ork=s=>typeof s.order==='number'?s.order:Number.MAX_SAFE_INTEGER;
+  return state.series.filter(c=>(c.parentId||null)===(id||null))
+    .sort((a,b)=>(ork(a)-ork(b))||((a.createdAt||0)-(b.createdAt||0)));
+}
 function seriesOrdered(){
   const out=[];
-  const walk=pid=>{state.series.forEach(s=>{if(s.parentId===pid){out.push(s.id);walk(s.id);}});};
+  const walk=pid=>{seriesChildren(pid).forEach(s=>{out.push(s.id);walk(s.id);});};
   walk(null);
   return out;
+}
+function nextSeriesOrder(parentId){
+  const sibs=state.series.filter(s=>(s.parentId||null)===(parentId||null));
+  return sibs.reduce((m,s)=>Math.max(m,typeof s.order==='number'?s.order:0),-1)+1;
+}
+function moveSeriesTo(dragId,targetId){
+  const a=seriesById(dragId),b=seriesById(targetId);
+  if(!a||!b||dragId===targetId)return false;
+  if((a.parentId||null)!==(b.parentId||null))return false;
+  const sibs=seriesChildren(a.parentId).map(s=>s.id);
+  const from=sibs.indexOf(dragId),to=sibs.indexOf(targetId);
+  if(from<0||to<0)return false;
+  sibs.splice(from,1);sibs.splice(to,0,dragId);
+  sibs.forEach((sid,i)=>{const s=seriesById(sid);if(s)s.order=i;});
+  return true;
+}
+let dragSeriesId=null;
+function seriesDragStart(e,id){
+  dragSeriesId=id;
+  if(e.dataTransfer){e.dataTransfer.effectAllowed='move';try{e.dataTransfer.setData('text/plain',id);}catch(err){}}
+  const el=e.currentTarget;
+  if(el){const host=el.closest('.series-card,.s-sub')||el;host.classList.add('dragging');}
+  if(e.stopPropagation)e.stopPropagation();
+}
+function seriesDragEnd(e){
+  document.querySelectorAll('.dragging,.drag-over').forEach(x=>x.classList.remove('dragging','drag-over'));
+  dragSeriesId=null;
+}
+function seriesDragOver(e,id){
+  if(!dragSeriesId||dragSeriesId===id)return;
+  const a=seriesById(dragSeriesId),b=seriesById(id);
+  if(!a||!b||(a.parentId||null)!==(b.parentId||null))return;
+  e.preventDefault();if(e.stopPropagation)e.stopPropagation();
+  if(e.dataTransfer)e.dataTransfer.dropEffect='move';
+  if(e.currentTarget)e.currentTarget.classList.add('drag-over');
+}
+function seriesDragLeave(e){
+  if(e&&e.currentTarget)e.currentTarget.classList.remove('drag-over');
+}
+function seriesDrop(e,targetId){
+  e.preventDefault();if(e.stopPropagation)e.stopPropagation();
+  document.querySelectorAll('.drag-over').forEach(x=>x.classList.remove('drag-over'));
+  const moved=dragSeriesId?moveSeriesTo(dragSeriesId,targetId):false;
+  dragSeriesId=null;
+  if(moved){save();render();toast('系列顺序已更新');}
 }
 function allEntries(){
   const arr=[];
@@ -1007,17 +1076,22 @@ function groupBySeries(items,cardFn){
 
 /* ===== Idea 视图 ===== */
 let ideaFilter='all';
+let ideaSeriesFilter='';
 function viewIdeas(){
   const tags=[...new Set(state.ideas.flatMap(i=>i.tags))].sort();
   let list=state.ideas.slice().sort((a,b)=>(a.done-b.done)||(b.createdAt-a.createdAt));
+  if(ideaSeriesFilter)list=list.filter(i=>i.seriesId===ideaSeriesFilter);
   if(ideaFilter==='open')list=list.filter(i=>!i.done);
   if(ideaFilter==='done')list=list.filter(i=>i.done);
   if(ideaFilter!=='all'&&!['open','done'].includes(ideaFilter))list=list.filter(i=>i.tags.includes(ideaFilter));
-  const g=groupBySeries(list,ideaCard);
   return `
   <div class="toolbar">
     <button class="btn" onclick="openIdeaModal()">${ICONS.plus}新建灵感</button>
     <div class="spacer"></div>
+    <select class="select filter-select" onchange="ideaSeriesFilter=this.value;render()">
+      <option value="">全部系列</option>
+      ${seriesOrdered().map(pid=>{const s=seriesById(pid);if(!s)return '';return '<option value="'+s.id+'"'+(ideaSeriesFilter===s.id?' selected':'')+'>'+'　'.repeat(seriesDepth(s.id)-1)+esc(s.name)+'</option>';}).join('')}
+    </select>
     <div class="filter-group">
       <button class="chip ${ideaFilter==='all'?'on':''}" onclick="ideaFilter='all';render()">全部<span class="cnt">${state.ideas.length}</span></button>
       <button class="chip ${ideaFilter==='open'?'on':''}" onclick="ideaFilter='open';render()">待孵化<span class="cnt">${state.ideas.filter(i=>!i.done).length}</span></button>
@@ -1025,7 +1099,7 @@ function viewIdeas(){
       ${tags.map(t=>`<button class="chip ${ideaFilter===t?'on':''}" onclick="ideaFilter='${t}';render()">${esc(t)}<span class="cnt">${state.ideas.filter(i=>i.tags.includes(t)).length}</span></button>`).join('')}
     </div>
   </div>
-  ${list.length?g.html:emptyBox('这里还没有灵感','点击右上角「新建灵感」记录第一个想法，可以打标签、归入系列。','#/ideas','去记录')}`;
+  ${list.length?`<div class="cards vertical">${list.map(ideaCard).join('')}</div>`:emptyBox('这里还没有灵感','点击右上角「新建灵感」记录第一个想法，可以打标签、归入系列。','#/ideas','去记录')}`;
 }
 function ideaCard(i){
   const imp=i.importance===2?'<span class="pill star">加急</span>':i.importance===1?'<span class="pill open">重要</span>':'';
@@ -1033,7 +1107,7 @@ function ideaCard(i){
     <span class="rail ${i.done?'':'on'}"></span>
     <div class="body">
       <div class="title"><span class="t">${esc(i.title)}</span>${imp}${i.done?'<span class="pill done">已完成</span>':''}</div>
-      <div class="meta">${relTime(i.updatedAt||i.createdAt)}${i.tags.map(t=>'<span class="tag">'+esc(t)+'</span>').join('')}</div>
+      <div class="meta">${relTime(i.updatedAt||i.createdAt)}${entryMeta({ref:i})}${i.tags.map(t=>'<span class="tag">'+esc(t)+'</span>').join('')}</div>
       ${i.content?foldBody(i.id,md(i.content)):''}
     </div>
     <div class="actions">
@@ -1284,7 +1358,6 @@ let noteSeriesFilter='';
 function viewNotes(){
   let list=state.notes.slice().sort((a,b)=>(b.pinned-a.pinned)||(b.updatedAt-a.updatedAt));
   if(noteSeriesFilter)list=list.filter(n=>n.seriesId===noteSeriesFilter);
-  const g=groupBySeries(list,noteCard);
   return `
   <div class="toolbar">
     <button class="btn" onclick="openNoteModal()">${ICONS.plus}新建笔记</button>
@@ -1295,14 +1368,14 @@ function viewNotes(){
     </select>
     <button class="btn ghost sm" onclick="navigate('#/search')">${ICONS.search}搜索</button>
   </div>
-  ${list.length?g.html:emptyBox('还没有笔记','写一篇长一点的笔记，把想法沉淀下来，可以置顶或归入系列。','#/notes','去记录')}`;
+  ${list.length?`<div class="cards vertical">${list.map(noteCard).join('')}</div>`:emptyBox('还没有笔记','写一篇长一点的笔记，把想法沉淀下来，可以置顶或归入系列。','#/notes','去记录')}`;
 }
 function noteCard(n){
   return `<div class="entry" style="cursor:pointer" onclick="openNoteModal('${n.id}')">
     <span class="rail ${n.pinned?'on':''}"></span>
     <div class="body">
       <div class="title"><span class="t">${esc(n.title)}</span>${n.pinned?'<span class="pill" style="background:var(--amber-soft);color:#8A5F15">置顶</span>':''}</div>
-      <div class="meta">${relTime(n.updatedAt||n.createdAt)}${n.url?'<span class="note-src" title="'+esc(n.url)+'" onclick="event.stopPropagation();window.open(\''+esc(n.url)+'\',\'_blank\')">'+ICONS.link+'<span style="overflow:hidden;text-overflow:ellipsis">'+esc(n.url.replace(/^https?:\/\//,''))+'</span></span>':''}</div>
+      <div class="meta">${relTime(n.updatedAt||n.createdAt)}${entryMeta({ref:n})}${n.url?'<span class="note-src" title="'+esc(n.url)+'" onclick="event.stopPropagation();window.open(\''+esc(n.url)+'\',\'_blank\')">'+ICONS.link+'<span style="overflow:hidden;text-overflow:ellipsis">'+esc(n.url.replace(/^https?:\/\//,''))+'</span></span>':''}</div>
       ${n.content?foldBody(n.id,md(n.content)):''}
     </div>
     <div class="actions">
@@ -1321,7 +1394,6 @@ let webSeriesFilter='';
 function viewWebnotes(){
   let list=state.webnotes.slice().sort((a,b)=>b.createdAt-a.createdAt);
   if(webSeriesFilter)list=list.filter(w=>w.seriesId===webSeriesFilter);
-  const g=groupBySeries(list,webCard);
   return `
   <div class="toolbar">
     <button class="btn" onclick="openWebModal()">${ICONS.plus}收藏网址</button>
@@ -1332,7 +1404,7 @@ function viewWebnotes(){
     </select>
     <button class="btn ghost sm" onclick="navigate('#/search')">${ICONS.search}搜索</button>
   </div>
-  ${list.length?g.html:emptyBox('还没有书签','把通篇都有用的文章、工具站网址收藏进来，点击标题即可打开原文。','#/webnotes','去收藏')}`;
+  ${list.length?`<div class="cards vertical">${list.map(webCard).join('')}</div>`:emptyBox('还没有书签','把通篇都有用的文章、工具站网址收藏进来，点击标题即可打开原文。','#/webnotes','去收藏')}`;
 }
 function webCard(w){
   const host=w.url.replace(/^https?:\/\//,'').split('/')[0];
@@ -1342,7 +1414,7 @@ function webCard(w){
       <div class="title"><span class="t" style="cursor:pointer" onclick="window.open('${esc(w.url)}','_blank')">${esc(w.title)}</span></div>
       <div class="url" title="${esc(w.url)}" onclick="window.open('${esc(w.url)}','_blank')">${ICONS.link}${esc(host)}</div>
       ${w.excerpt?foldBody(w.id,md(w.excerpt)):''}
-      <div class="meta">${relTime(w.createdAt)}</div>
+      <div class="meta">${relTime(w.createdAt)}${entryMeta({ref:w})}</div>
     </div>
     <div class="actions">
       <button class="icon-btn" title="在浏览器打开" onclick="window.open('${esc(w.url)}','_blank')">${ICONS.link}</button>
@@ -1498,13 +1570,14 @@ function viewSeries(){
   <div class="toolbar">
     <button class="btn" onclick="openSeriesModal()">${ICONS.plus}新建系列</button>
     <div class="spacer"></div>
+    <span class="hint" style="margin-right:8px">拖动卡片可调整顺序（仅同层）</span>
     <button class="btn ghost sm" onclick="navigate('#/search')">${ICONS.search}搜索</button>
   </div>
   ${state.series.length?`<div class="series-grid">${state.series.filter(s=>!s.parentId).map(seriesCard).join('')}</div>`:emptyBox('还没有系列','系列用来把灵感、笔记、网站和任务组织成一条线索，例如「个人项目」「读书计划」。','#/series','去创建')}
   ${unTotal?`<div class="section" style="margin-top:26px"><div class="section-head"><h2>${ICONS.inbox} 未分类</h2></div>
     <div class="cards"><div class="entry"><span class="rail"></span><div class="body">
       <div class="meta" style="margin:0;gap:14px">${[['灵感',un.ideas],['笔记',un.notes],['书签',un.webs],['任务',un.tasks]].filter(p=>p[1]>0).map(p=>'<span>'+p[0]+' '+p[1]+' 条</span>').join('')}</div>
-      <div style="font-size:12.5px;color:var(--muted);margin-top:7px">这些内容还没有归入系列。在各列表页的「未分类」分组中可以看到并编辑，编辑时选择系列即可归类。</div>
+      <div style="font-size:12.5px;color:var(--muted);margin-top:7px">这些内容还没有归入系列。可在各列表页右上角的系列筛选里定位，编辑时选择系列即可归类。</div>
     </div></div></div>
   </div>`:''}`;
 }
@@ -1517,8 +1590,8 @@ function seriesCard(s){
     ['书签',state.webnotes.filter(w=>w.seriesId===s.id).length],
     ['任务',state.tasks.filter(t=>t.seriesId===s.id).length]
   ].filter(p=>p[1]>0);
-  return `<div class="series-card">
-    <div class="s-top" onclick="navigate('#/series/${s.id}')"><i class="dot" style="width:14px;height:14px;background:${s.color}"></i><span class="s-name">${esc(s.name)}</span><span class="s-count">${cnt} 条内容</span></div>
+  return `<div class="series-card" ondragover="seriesDragOver(event,'${s.id}')" ondragleave="seriesDragLeave(event)" ondrop="seriesDrop(event,'${s.id}')">
+    <div class="s-top" onclick="navigate('#/series/${s.id}')"><span class="s-grip" title="拖动调整顺序" draggable="true" ondragstart="seriesDragStart(event,'${s.id}')" ondragend="seriesDragEnd(event)">${ICONS.grip}</span><i class="dot" style="width:14px;height:14px;background:${s.color}"></i><span class="s-name">${esc(s.name)}</span><span class="s-count">${cnt} 条内容</span></div>
     ${s.desc?'<div class="s-desc">'+esc(s.desc)+'</div>':''}
     ${kids.length?`<div class="s-kids">${kids.map(k=>seriesSubRow(k)).join('')}</div>`:''}
     <div class="s-foot">
@@ -1532,7 +1605,8 @@ function seriesCard(s){
 }
 function seriesSubRow(s){
   const kids=seriesChildren(s.id);
-  return `<div class="s-sub" onclick="event.stopPropagation();navigate('#/series/${s.id}')">
+  return `<div class="s-sub" ondragover="seriesDragOver(event,'${s.id}')" ondragleave="seriesDragLeave(event)" ondrop="seriesDrop(event,'${s.id}')" onclick="event.stopPropagation();navigate('#/series/${s.id}')">
+    <span class="s-grip" draggable="true" ondragstart="seriesDragStart(event,'${s.id}')" ondragend="seriesDragEnd(event)">${ICONS.grip}</span>
     <i class="dot" style="width:10px;height:10px;background:${s.color}"></i>
     <span class="s-sub-name">${esc(s.name)}</span>
     <span class="s-count">${seriesCount(s.id)}</span>
@@ -1577,8 +1651,8 @@ function saveSeries(id){
     if(seriesSubIds(id).indexOf(parentId)>=0){toast('不能选择自己的子系列作为父系列');return;}
     if(seriesDepth(parentId)>=3){toast('系列最多嵌套 3 层');return;}
   }
-  if(id){const s=seriesById(id);Object.assign(s,{name,desc:fv('f-desc'),color,parentId});}
-  else{state.series.push({id:uid(),name,desc:fv('f-desc'),color,parentId,createdAt:Date.now()});}
+  if(id){const s=seriesById(id);const oldParent=s.parentId||null;Object.assign(s,{name,desc:fv('f-desc'),color,parentId});if(oldParent!==(parentId||null))s.order=nextSeriesOrder(parentId);}
+  else{state.series.push({id:uid(),name,desc:fv('f-desc'),color,parentId,order:nextSeriesOrder(parentId),createdAt:Date.now()});}
   save();closeModal();render();toast(id?'系列已更新':'系列已创建');
 }
 function delSeries(id){
@@ -1758,6 +1832,8 @@ function initEvents(){
           }).then(()=>{
             state=d;
             state.notes.forEach(n=>{if(typeof n.url==='undefined')n.url='';});
+            state.series.forEach(s=>{if(typeof s.parentId==='undefined')s.parentId=null;});
+            normalizeSeriesOrder();
             save();render();toast('导入成功'+(Object.keys(imgs).length?'（含 '+Object.keys(imgs).length+' 张图片）':''));
           }).catch(()=>toast('导入成功，但图片恢复失败'));
         });
