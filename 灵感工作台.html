@@ -355,6 +355,11 @@ input[type="range"]{accent-color:var(--accent)}
 .gantt-row .pill{flex:0 0 auto}
 .gantt-row .g-name{font-size:13.5px;font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
 .gantt-row .g-sdate{font-size:11.5px;color:var(--muted);white-space:nowrap;font-variant-numeric:tabular-nums}
+.gantt-row .g-rep{font-size:11px;color:var(--accent);font-weight:600;white-space:nowrap;flex:0 0 auto;background:var(--accent-soft);padding:2px 7px;border-radius:20px}
+.gantt-row .g-grip{display:inline-flex;align-items:center;justify-content:center;width:14px;height:20px;flex:0 0 14px;color:var(--faint);cursor:grab}
+.gantt-row .g-grip svg{width:12px;height:12px}
+.gantt-row.dragging{opacity:.45}
+.gantt-row.drag-over{background:var(--accent-soft);box-shadow:inset 3px 0 0 var(--accent)}
 .gantt-track{position:relative;border-bottom:1px solid var(--line);height:46px}
 .gantt-grid{position:absolute;inset:0;display:flex}
 .gantt-grid .cell{flex:1;border-right:1px solid var(--cell-line);position:relative}
@@ -368,6 +373,8 @@ input[type="range"]{accent-color:var(--accent)}
 .g-bar .g-btxt{overflow:hidden;text-overflow:ellipsis}
 .g-bar:hover{filter:brightness(1.08)}
 .g-bar.done{opacity:.55}
+.g-bar.rep{min-width:3px;padding:0;top:11px;height:24px;border-radius:4px;opacity:.85;box-shadow:none}
+.g-bar.rep:hover{opacity:1;filter:none}
 .g-legend{display:flex;gap:14px;padding:10px 18px;border-top:1px solid var(--line);flex-wrap:wrap;font-size:12px;color:var(--muted)}
 .g-legend span{display:inline-flex;align-items:center;gap:6px}
 .gantt-now-line{position:absolute;top:0;bottom:0;width:2px;background:var(--danger);z-index:5;pointer-events:none}
@@ -581,6 +588,43 @@ function parseDate(s){
   return y+'-'+pad(mo)+'-'+pad(d);
 }
 function dayDiff(a,b){return Math.round((parseDay(b)-parseDay(a))/D);}
+
+/* ===== 重复提醒（周期任务） ===== */
+const WEEK_NAMES=['一','二','三','四','五','六','日'];
+function weekIndex(dt){return ((dt.getDay()+6)%7)+1;}
+function isOccurrence(rep,ms){
+  if(!rep)return false;
+  const dt=new Date(ms);
+  if(rep.kind==='day')return true;
+  if(rep.kind==='week')return weekIndex(dt)===(rep.day||1);
+  const last=new Date(dt.getFullYear(),dt.getMonth()+1,0).getDate();
+  return dt.getDate()===Math.min(rep.day||1,last);
+}
+function nextOccurrence(rep,fromMs){
+  if(!rep)return fromMs;
+  if(rep.kind==='day')return fromMs;
+  let d=fromMs;
+  for(let i=0;i<400;i++){if(isOccurrence(rep,d))return d;d+=D;}
+  return fromMs;
+}
+function prevOccurrence(rep,beforeMs){
+  if(!rep)return beforeMs-D;
+  let d=beforeMs;
+  for(let i=0;i<400;i++){if(isOccurrence(rep,d))return d;d-=D;}
+  return beforeMs-D*30;
+}
+function occurrencesBetween(rep,fromMs,toMs){
+  const out=[];if(!rep)return out;
+  let d=fromMs,guard=0;
+  while(d<=toMs&&guard<600){if(isOccurrence(rep,d))out.push(d);d+=D;guard++;}
+  return out;
+}
+function repeatLabel(rep){
+  if(!rep)return '';
+  if(rep.kind==='day')return '每天';
+  if(rep.kind==='week')return '每周'+(WEEK_NAMES[(rep.day||1)-1]||'一');
+  return '每月'+(rep.day||1)+'号';
+}
 function relTime(ts){
   const diff=Date.now()-ts;
   if(diff<60e3)return '刚刚';
@@ -688,7 +732,7 @@ function doUndo(){
   render();
   toast('已撤销');
 }
-state=load()||seedData();normalizeSeriesOrder();save();initDone=true;
+state=load()||seedData();normalizeSeriesOrder();normalizeTaskOrder();save();initDone=true;
 
 /* ===== 派生数据 ===== */
 function normalizeSeriesOrder(){
@@ -784,6 +828,10 @@ function allEntries(){
 }
 function taskDaysLeft(t){
   const today=parseDay(todayStr());
+  if(t&&t.repeat){
+    const next=nextOccurrence(t.repeat,today);
+    return {s:today,e:next,today,left:Math.round((next-today)/D),started:true,finished:false,next,periodic:true};
+  }
   const s=parseDay(t.start),e=parseDay(t.end);
   return {s,e,today,left:Math.round((e-today)/D),started:today>=s,finished:today>e};
 }
@@ -965,6 +1013,20 @@ function renderCountdown(tasks){
   const cs=getComputedStyle(document.documentElement);
   const COL_DANGER=cs.getPropertyValue('--danger').trim(),COL_AMBER=cs.getPropertyValue('--amber').trim(),COL_ACCENT=cs.getPropertyValue('--accent').trim();
   return '<div class="countdown-list">'+tasks.map(t=>{
+    if(t.repeat){
+      const rep=t.repeat,r=taskDaysLeft(t),left=r.left;
+      const prev=prevOccurrence(rep,r.next-D);
+      const total=Math.max(1,r.next-prev),pct=Math.max(0,Math.min(1,(today-prev)/total));
+      const C=2*Math.PI*22;
+      return `<div class="cd-card">
+        <div class="cd-ring"><svg width="54" height="54"><circle cx="27" cy="27" r="22" fill="none" stroke="var(--bg)" stroke-width="5"/><circle cx="27" cy="27" r="22" fill="none" stroke="${COL_ACCENT}" stroke-width="5" stroke-linecap="round" stroke-dasharray="${C}" stroke-dashoffset="${C*(1-pct)}"/></svg><span class="cd-num">${left}<span class="cd-unit">天</span></span></div>
+        <div class="cd-info">
+          <div class="name">${esc(t.name)}${(seriesById(t.seriesId)||t.color)?'<i class="dot" style="background:'+taskColor(t)+'"></i>':''}<span class="pill ok">周期提醒</span></div>
+          <div class="date">${esc(repeatLabel(rep))} · 下次 ${esc(fmtDate(r.next))}<span>${left===0?'就在今天':fmtLeft(left)}</span></div>
+          <div class="cd-bar"><i style="width:${pct*100}%"></i></div>
+        </div>
+      </div>`;
+    }
     const s=seriesById(t.seriesId);
     const r=taskDaysLeft(t);
     const done=isTaskDone(t);
@@ -1428,8 +1490,59 @@ function delWeb(id){confirmDialog('删除这条网站笔记？',()=>{state.webno
 
 /* ===== 甘特图倒计时视图 ===== */
 let ganttZoom='day';
+function taskOrderCmp(a,b){
+  const ao=typeof a.order==='number'?a.order:Number.MAX_SAFE_INTEGER;
+  const bo=typeof b.order==='number'?b.order:Number.MAX_SAFE_INTEGER;
+  return (ao-bo)||((a.createdAt||0)-(b.createdAt||0));
+}
+function normalizeTaskOrder(){
+  if(!state.tasks||!state.tasks.length)return;
+  if(state.tasks.every(t=>typeof t.order==='number'))return;
+  const sorted=state.tasks.slice().sort((a,b)=>(parseDay(a.start)-parseDay(b.start))||((a.createdAt||0)-(b.createdAt||0)));
+  sorted.forEach((t,i)=>{t.order=i;});
+}
+function nextTaskOrder(){
+  let m=-1;state.tasks.forEach(t=>{if(typeof t.order==='number'&&t.order>m)m=t.order;});
+  return m+1;
+}
+function moveTaskTo(dragId,targetId){
+  if(!dragId||!targetId||dragId===targetId)return false;
+  const ids=state.tasks.slice().sort(taskOrderCmp).map(t=>t.id);
+  const from=ids.indexOf(dragId),to=ids.indexOf(targetId);
+  if(from<0||to<0)return false;
+  ids.splice(from,1);ids.splice(to,0,dragId);
+  ids.forEach((id,i)=>{const t=state.tasks.find(x=>x.id===id);if(t)t.order=i;});
+  return true;
+}
+let taskDragId=null,dragTaskSuppress=false;
+function taskDragStart(e,id){
+  taskDragId=id;dragTaskSuppress=false;
+  e.currentTarget.classList.add('dragging');
+  if(e.dataTransfer){e.dataTransfer.effectAllowed='move';try{e.dataTransfer.setData('text/plain',id);}catch(_){}}
+}
+function taskDragOver(e,id){
+  if(!taskDragId||taskDragId===id)return;
+  e.preventDefault();
+  if(e.dataTransfer)e.dataTransfer.dropEffect='move';
+  $$('.gantt-row.drag-over').forEach(r=>r.classList.remove('drag-over'));
+  e.currentTarget.classList.add('drag-over');
+}
+function taskDragLeave(e){e.currentTarget.classList.remove('drag-over');}
+function taskDrop(e,id){
+  e.preventDefault();
+  e.currentTarget.classList.remove('drag-over');
+  const moved=moveTaskTo(taskDragId,id);
+  taskDragId=null;dragTaskSuppress=moved;
+  if(moved){save();render();toast('任务顺序已更新');}
+  setTimeout(()=>{dragTaskSuppress=false;},280);
+}
+function taskDragEnd(e){
+  taskDragId=null;
+  $$('.gantt-row.dragging').forEach(r=>r.classList.remove('dragging'));
+  $$('.gantt-row.drag-over').forEach(r=>r.classList.remove('drag-over'));
+}
 function viewGantt(){
-  const tasks=state.tasks.slice().sort((a,b)=>parseDay(a.start)-parseDay(b.start));
+  const tasks=state.tasks.slice().sort(taskOrderCmp);
   const head=`<div class="gantt-head">
     <h2>项目时间线</h2>
     <div class="gantt-scale">
@@ -1441,24 +1554,35 @@ function viewGantt(){
   </div>`;
   if(!tasks.length)return `<div class="gantt-wrap">${head}${emptyBox('还没有任务','新建带起止日期的任务，甘特图会按时间线排列，并自动计算倒计时。','#/gantt','去建任务')}</div>`;
   const grid=ganttGrid(tasks);
-  const labels='<div class="gantt-row g-head" style="height:34px;background:var(--bg)"><span style="font-size:12px;font-weight:600;color:var(--muted)">任务</span></div>'
+  const labels='<div class="gantt-row g-head" style="height:34px;background:var(--bg)"><span style="font-size:12px;font-weight:600;color:var(--muted)">任务</span><span style="font-size:10.5px;color:var(--faint);margin-left:auto;padding-right:4px">拖动排序</span></div>'
     +tasks.map(t=>{
       const r=taskDaysLeft(t);
       const leftPill=r.left<0?'<span class="pill soon">已超 '+(-r.left)+' 天</span>':r.left<=7?'<span class="pill soon">剩 '+r.left+' 天</span>':'<span class="pill ok">剩 '+r.left+' 天</span>';
-      return `<div class="gantt-row" onclick="openTaskModal('${t.id}')">
+      const sub=t.repeat
+        ? `<span class="g-rep" title="周期提醒 · 无结束日期">${esc(repeatLabel(t.repeat))}</span>`
+        : `<span class="g-sdate">${t.start.slice(5)}</span>`;
+      return `<div class="gantt-row" draggable="true" data-task="${t.id}" ondragstart="taskDragStart(event,'${t.id}')" ondragover="taskDragOver(event,'${t.id}')" ondragleave="taskDragLeave(event)" ondrop="taskDrop(event,'${t.id}')" ondragend="taskDragEnd(event)" onclick="if(!dragTaskSuppress)openTaskModal('${t.id}')">
+        <span class="g-grip" title="拖动调整优先级">${ICONS.grip}</span>
         <i class="dot" style="background:${taskColor(t)}"></i>
-        <span class="g-name">${esc(t.name)}</span>
-        <span class="g-sdate">${t.start.slice(5)}</span>${leftPill}
+        <span class="g-name">${esc(t.name)}</span>${sub}${leftPill}
       </div>`;
     }).join('');
   const tracks=tasks.map(t=>{
     const col=taskColor(t);
+    if(t.repeat){
+      const occ=occurrencesBetween(t.repeat,grid.min,grid.max);
+      const marks=occ.map(o=>{
+        const ds=fmtDate(o),left=grid.pct((o-grid.min)/D),w=grid.pctW(ds,ds);
+        return `<div class="g-bar rep" style="left:${left}%;width:max(3px,${w}%);background:${col}" onclick="if(!dragTaskSuppress)openTaskModal('${t.id}')" title="${esc(t.name)} · ${esc(repeatLabel(t.repeat))} · ${esc(ds)}"></div>`;
+      }).join('');
+      return `<div class="gantt-track">${grid.cellsHTML}${marks}</div>`;
+    }
     const left=grid.pct((parseDay(t.start)-grid.min)/D),w=grid.pctW(t.start,t.end);
     const r=taskDaysLeft(t);
     const done=r.finished?' done':'';
     return `<div class="gantt-track">
       ${grid.cellsHTML}
-      <div class="g-bar${done}" style="left:${left}%;width:${w}%;background:${col}" onclick="openTaskModal('${t.id}')" title="${esc(t.name)} · ${esc(t.start)} → ${esc(t.end)}">
+      <div class="g-bar${done}" style="left:${left}%;width:${w}%;background:${col}" onclick="if(!dragTaskSuppress)openTaskModal('${t.id}')" title="${esc(t.name)} · ${esc(t.start)} → ${esc(t.end)}">
         <span class="g-btxt">${esc(t.name)}${r.left<0?' · 已超'+(-r.left)+'天':''}</span>
       </div>
     </div>`;
@@ -1483,7 +1607,10 @@ function ganttGrid(tasks){
   const cellW=ganttZoom==='day'?34:ganttZoom==='week'?30:90;
   const today=parseDay(todayStr());
   let min=Infinity,max=-Infinity;
-  tasks.forEach(t=>{const s=parseDay(t.start),e=parseDay(t.end);min=Math.min(min,s);max=Math.max(max,e);});
+  tasks.forEach(t=>{
+    if(t.repeat){max=Math.max(max,nextOccurrence(t.repeat,today));return;}
+    const s=parseDay(t.start),e=parseDay(t.end);min=Math.min(min,s);max=Math.max(max,e);
+  });
   min=Math.min(min,today-6*D);max=Math.max(max,today+14*D);
   const startD=new Date(min);
   if(gridDays===7){const off=(startD.getDay()+6)%7;min-=off*D;}
@@ -1522,15 +1649,30 @@ function taskColor(t){
 function openTaskModal(id){
   const t=id?state.tasks.find(x=>x.id===id):null;
   const td=todayStr();
+  const rep=t&&t.repeat?t.repeat:null;
+  const dayOpts=rep&&rep.kind==='week'
+    ? WEEK_NAMES.map((n,i)=>`<option value="${i+1}"${(rep.day||1)===i+1?' selected':''}>周${n}</option>`).join('')
+    : Array.from({length:31},(_,i)=>`<option value="${i+1}"${rep&&rep.day===i+1?' selected':''}>${i+1} 号</option>`).join('');
   openModal(`<div class="modal">
     <div class="modal-head"><h3>${t?'编辑任务':'新建任务'}</h3><button class="icon-btn" onclick="closeModal()">${ICONS.del}</button></div>
     <div class="modal-body">
       <div class="field"><label>任务名称</label><input class="input" id="f-name" maxlength="80" placeholder="如：上线新版首页" value="${t?esc(t.name):''}"></div>
-      <div class="form-row">
+      <div class="form-row" id="f-dates"${rep?' style="display:none"':''}>
         <div class="field"><label>开始日期</label><input class="input" type="text" id="f-start" placeholder="2023-05-04 / 2023.05.04" value="${t?t.start:td}"></div>
         <div class="field"><label>结束日期</label><input class="input" type="text" id="f-end" placeholder="2023-05-04 / 2023.05.04" value="${t?t.end:td}"></div>
       </div>
-      <div class="field"><label>进度</label><div class="range-wrap"><input type="range" id="f-prog" min="0" max="100" step="5" value="${t?t.progress:0}"><output id="f-prog-out">${t?t.progress:0}%</output></div></div>
+      <div class="field"><label>重复提醒 <span class="hint">可选 · 按天/周/月循环，不设结束日期</span></label>
+        <div class="filter-group" id="f-repeat">
+          <button type="button" class="chip${rep?'':' on'}" data-k="" onclick="pickRepeat(this)">不重复</button>
+          <button type="button" class="chip${rep&&rep.kind==='day'?' on':''}" data-k="day" onclick="pickRepeat(this)">每天</button>
+          <button type="button" class="chip${rep&&rep.kind==='week'?' on':''}" data-k="week" onclick="pickRepeat(this)">每周</button>
+          <button type="button" class="chip${rep&&rep.kind==='month'?' on':''}" data-k="month" onclick="pickRepeat(this)">每月</button>
+        </div>
+        <div id="f-repeat-day-wrap" style="margin-top:8px;${rep&&rep.kind!=='day'?'':'display:none'}">
+          <select class="select" id="f-repeat-day">${dayOpts}</select>
+        </div>
+      </div>
+      <div class="field" id="f-prog-field"${rep?' style="display:none"':''}><label>进度</label><div class="range-wrap"><input type="range" id="f-prog" min="0" max="100" step="5" value="${t?t.progress:0}"><output id="f-prog-out">${t?t.progress:0}%</output></div></div>
       <div class="field"><label>系列</label><select class="select" id="f-series">${seriesOptions(t?t.seriesId:'')}</select></div>
       <div class="field"><label>颜色 <span class="hint">不选则跟随所属系列颜色</span></label>
         <div class="color-pick" id="f-color">
@@ -1548,16 +1690,49 @@ function openTaskModal(id){
     d.classList.add('on');
   }));
 }
+function pickRepeat(el){
+  $$('#f-repeat .chip').forEach(c=>c.classList.remove('on'));
+  el.classList.add('on');
+  const k=el.dataset.k||'';
+  const wrap=$('#f-repeat-day-wrap'),sel=$('#f-repeat-day'),dates=$('#f-dates'),prog=$('#f-prog-field');
+  if(dates)dates.style.display=k?'none':'grid';
+  if(prog)prog.style.display=k?'none':'block';
+  if(!wrap||!sel)return;
+  if(!k||k==='day'){wrap.style.display='none';return;}
+  wrap.style.display='block';
+  const cur=+sel.value||0;
+  if(sel.dataset.k!==k){
+    sel.innerHTML=k==='week'
+      ? WEEK_NAMES.map((n,i)=>`<option value="${i+1}">周${n}</option>`).join('')
+      : Array.from({length:31},(_,i)=>`<option value="${i+1}">${i+1} 号</option>`).join('');
+    sel.dataset.k=k;
+    sel.value=k==='week'?'1':'3';
+    return;
+  }
+  const vals=[].slice.call(sel.options).map(o=>+o.value);
+  sel.value=vals.indexOf(cur)>=0?cur:(k==='week'?1:3);
+}
 function saveTask(id){
   const name=fv('f-name');if(!name){toast('请填写任务名称');return;}
-  const start=parseDate($('#f-start').value),end=parseDate($('#f-end').value);
-  if(!start||!end){toast('日期格式不正确，支持 2023-05-04、2023.05.04、2023/05/04');return;}
-  if(parseDay(end)<parseDay(start)){toast('结束日期不能早于开始日期');return;}
-  const progress=+$('#f-prog').value;
+  const repEl=$('#f-repeat .chip.on');
+  const kind=repEl?(repEl.dataset.k||''):'';
+  const sel=$('#f-repeat-day');
+  const repeat=kind?{kind,day:kind==='day'?0:Math.min(31,Math.max(1,+((sel&&sel.value)||1)))}:null;
+  let start,end;
+  if(repeat){
+    const old=id?state.tasks.find(x=>x.id===id):null;
+    start=(old&&old.start)||todayStr();
+    end=start;
+  }else{
+    start=parseDate($('#f-start').value);end=parseDate($('#f-end').value);
+    if(!start||!end){toast('日期格式不正确，支持 2023-05-04、2023.05.04、2023/05/04');return;}
+    if(parseDay(end)<parseDay(start)){toast('结束日期不能早于开始日期');return;}
+  }
+  const progress=repeat?0:+$('#f-prog').value;
   const colorEl=$('#f-color .color-dot.on');
   const color=colorEl?colorEl.dataset.v:'';
-  if(id){const t=state.tasks.find(x=>x.id===id);Object.assign(t,{name,start,end,progress,seriesId:fv('f-series')||null,note:fv('f-note'),color});}
-  else{state.tasks.push({id:uid(),name,start,end,progress,seriesId:fv('f-series')||null,note:fv('f-note'),color,createdAt:Date.now()});}
+  if(id){const t=state.tasks.find(x=>x.id===id);Object.assign(t,{name,start,end,progress,seriesId:fv('f-series')||null,note:fv('f-note'),color,repeat});}
+  else{state.tasks.push({id:uid(),name,start,end,progress,seriesId:fv('f-series')||null,note:fv('f-note'),color,repeat,order:nextTaskOrder(),createdAt:Date.now()});}
   save();closeModal();render();toast(id?'任务已更新':'任务已创建');
 }
 function delTask(id){confirmDialog('删除这个任务？',()=>{state.tasks=state.tasks.filter(x=>x.id!==id);save();render();toast('已删除');});}
@@ -1730,7 +1905,7 @@ function taskRow(t){
     <span class="rail on" style="background:${taskColor(t)}"></span>
     <div class="body">
       <div class="title"><span class="t">${esc(t.name)}</span><span class="pill ${r.left<0?'soon':r.left<=7?'soon':'ok'}">${fmtLeft(r.left)}</span></div>
-      <div class="meta">${esc(t.start)} → ${esc(t.end)}<span>进度 ${t.progress}%</span></div>
+      <div class="meta">${t.repeat?`<span style="color:var(--accent);font-weight:600">${esc(repeatLabel(t.repeat))}</span><span>下次 ${esc(fmtDate(r.next).slice(5))}</span>`:`${esc(t.start)} → ${esc(t.end)}<span>进度 ${t.progress}%</span>`}</div>
       ${t.note?'<div class="content clamp">'+esc(t.note)+'</div>':''}
     </div>
     <div class="actions"><button class="icon-btn danger" onclick="event.stopPropagation();delTask('${t.id}')">${ICONS.del}</button></div>
@@ -1834,6 +2009,7 @@ function initEvents(){
             state.notes.forEach(n=>{if(typeof n.url==='undefined')n.url='';});
             state.series.forEach(s=>{if(typeof s.parentId==='undefined')s.parentId=null;});
             normalizeSeriesOrder();
+            normalizeTaskOrder();
             save();render();toast('导入成功'+(Object.keys(imgs).length?'（含 '+Object.keys(imgs).length+' 张图片）':''));
           }).catch(()=>toast('导入成功，但图片恢复失败'));
         });
