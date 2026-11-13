@@ -157,6 +157,7 @@ svg{display:block}
 
 /* ===== 统计卡 ===== */
 .stat-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-bottom:26px}
+.quick-grid{grid-template-columns:repeat(auto-fit,minmax(170px,1fr))}
 .stat-card{
   background:var(--card);border:1px solid var(--line);border-radius:var(--radius-m);
   padding:16px 18px;display:flex;align-items:center;gap:14px;box-shadow:var(--shadow-1);
@@ -487,6 +488,7 @@ mark{background:var(--mark-bg);color:inherit;border-radius:2px;padding:0 1px}
       <button class="nav-item" data-route="#/ideas"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-4 10.5c.7.6 1 1.3 1 2.5h6c0-1.2.3-1.9 1-2.5A6 6 0 0 0 12 3z"/></svg>灵感 Idea<span class="count" data-count="ideas">0</span></button>
       <button class="nav-item" data-route="#/notes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>笔记<span class="count" data-count="notes">0</span></button>
       <button class="nav-item" data-route="#/webnotes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>书签<span class="count" data-count="webnotes">0</span></button>
+      <button class="nav-item" data-route="#/readlater"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/><path d="M12 7v3.6l2.4 1.5"/></svg>待看<span class="count" data-count="readlater">0</span></button>
       <button class="nav-item" data-route="#/gantt"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h18M5 5v14M5 9h9v4H5z"/><path d="M5 15h13v4H5z"/></svg>甘特图倒计时<span class="count" data-count="tasks">0</span></button>
       <div class="nav-group">系列</div>
       <div class="series-mini" id="nav-series"></div>
@@ -640,6 +642,7 @@ const ICONS={
   idea:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-4 10.5c.7.6 1 1.3 1 2.5h6c0-1.2.3-1.9 1-2.5A6 6 0 0 0 12 3z"/></svg>',
   note:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>',
   web:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.6 3.8 5.7 3.8 9S14.5 18.4 12 21c-2.5-2.6-3.8-5.7-3.8-9S9.5 5.6 12 3z"/></svg>',
+  later:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/><path d="M12 7v3.6l2.4 1.5"/></svg>',
   task:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h18M5 5v14M5 9h9v4H5z"/><path d="M5 15h13v4H5z"/></svg>',
   edit:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>',
   del:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg>',
@@ -689,6 +692,7 @@ function seedData(){
       {id:uid(),url:'https://www.ruanyifeng.com/blog/',title:'阮一峰的网络日志',excerpt:'技术与科技观察，周刊质量稳定。',seriesId:s2a,createdAt:now-9*D},
       {id:uid(),url:'https://github.com/trending',title:'GitHub 热门仓库',excerpt:'每天快速扫一眼行业热点与新项目。',seriesId:s1,createdAt:now-7*D}
     ],
+    readlater:[],
     tasks:[
       {id:uid(),name:'搭建工作台网站',seriesId:s1,start:d(-10),end:d(6),progress:60,note:'记录 Idea 与笔记',createdAt:now-10*D},
       {id:uid(),name:'读完《设计心理学》',seriesId:s2,start:d(-4),end:d(12),progress:35,note:'每周两章',createdAt:now-6*D},
@@ -703,6 +707,7 @@ function load(){
     if(!d||!Array.isArray(d.series))return null;
     d.series.forEach(s=>{if(typeof s.parentId==='undefined')s.parentId=null;});
     d.notes.forEach(n=>{if(typeof n.url==='undefined')n.url='';});
+    if(!Array.isArray(d.readlater))d.readlater=[];
     return d;}catch(e){return null;}
 }
 const UNDO_LIMIT=50;
@@ -759,6 +764,7 @@ function seriesCount(id){
   return state.ideas.filter(i=>ids.indexOf(i.seriesId)>=0).length
     +state.notes.filter(n=>ids.indexOf(n.seriesId)>=0).length
     +state.webnotes.filter(w=>ids.indexOf(w.seriesId)>=0).length
+    +(state.readlater||[]).filter(w=>ids.indexOf(w.seriesId)>=0).length
     +state.tasks.filter(t=>ids.indexOf(t.seriesId)>=0).length;
 }
 function seriesDepth(id){let d=1,s=seriesById(id);while(s&&s.parentId){d++;s=seriesById(s.parentId);}return d;}
@@ -823,6 +829,7 @@ function allEntries(){
   state.ideas.forEach(i=>arr.push({kind:'idea',t:i.title,ts:i.updatedAt||i.createdAt,ref:i}));
   state.notes.forEach(n=>arr.push({kind:'note',t:n.title,ts:n.updatedAt||n.createdAt,ref:n}));
   state.webnotes.forEach(w=>arr.push({kind:'web',t:w.title,ts:w.createdAt,ref:w}));
+  if(Array.isArray(state.readlater))state.readlater.forEach(w=>arr.push({kind:'later',t:w.title,ts:w.createdAt,ref:w}));
   state.tasks.forEach(t=>arr.push({kind:'task',t:t.name,ts:t.createdAt,ref:t}));
   return arr.sort((a,b)=>b.ts-a.ts);
 }
@@ -883,7 +890,7 @@ function fmtLeft(n){
 
 /* ===== 路由与渲染 ===== */
 let route=location.hash||'#/';
-const TITLES={'/':'仪表盘','/ideas':'灵感 Idea','/notes':'笔记','/webnotes':'书签','/gantt':'甘特图倒计时','/series':'全部系列','/search':'搜索结果'};
+const TITLES={'/':'仪表盘','/ideas':'灵感 Idea','/notes':'笔记','/webnotes':'书签','/readlater':'待看','/gantt':'甘特图倒计时','/series':'全部系列','/search':'搜索结果'};
 function navigate(h){
   if(editorDirty&&h!==route&&(route.indexOf('/e/')>0||route.endsWith('/new'))){
     confirmDialog('内容还没保存，确定离开？',()=>{editorDirty=false;navigate(h);});return;
@@ -925,7 +932,10 @@ function render(){
   else if(seg.startsWith('/notes/e/')){const id=seg.slice(9);title='编辑笔记';html=viewEditor('note',id);}
   else if(seg==='/webnotes'){title=TITLES['/webnotes'];html=viewWebnotes();}
   else if(seg==='/webnotes/new'){title='收藏网址';html=viewEditor('web','');}
-  else if(seg.startsWith('/webnotes/e/')){const id=seg.slice(12);title='编辑书签';html=viewEditor('web',id);}
+  else if(seg==='/webnotes/e/'||seg.startsWith('/webnotes/e/')){const id=seg.slice(12);title='编辑书签';html=viewEditor('web',id);}
+  else if(seg==='/readlater'){title=TITLES['/readlater'];html=viewReadLater();}
+  else if(seg==='/readlater/new'){title='添加待看';html=viewEditor('later','');}
+  else if(seg.startsWith('/readlater/e/')){const id=seg.slice(13);title='编辑待看';html=viewEditor('later',id);}
   else if(seg==='/gantt'){title=TITLES['/gantt'];html=viewGantt();}
   else if(seg==='/series'){title=TITLES['/series'];html=viewSeries();}
   else if(seg.startsWith('/series/')){const id=seg.slice(8);const s=seriesById(id);title=s?s.name:'系列';html=viewSeriesDetail(id);}
@@ -950,7 +960,7 @@ function afterRender(){
     const ttl=$('#ed-title');
     if(ttl)ttl.addEventListener('input',()=>{editorDirty=true;});
     const edSeg=route.replace(/^#/,'');
-    const edKind=edSeg.indexOf('/notes')===0?'note':edSeg.indexOf('/webnotes')===0?'web':edSeg.indexOf('/ideas')===0?'idea':'';
+    const edKind=edSeg.indexOf('/notes')===0?'note':edSeg.indexOf('/webnotes')===0?'web':edSeg.indexOf('/readlater')===0?'later':edSeg.indexOf('/ideas')===0?'idea':'';
     const idHit=edSeg.match(/\/e\/(.+)$/);
     const edId=idHit?idHit[1]:'';
     ed.addEventListener('keydown',e=>{
@@ -999,10 +1009,11 @@ function viewDashboard(){
   </div>
   <div class="section">
     <div class="section-head"><h2>${ICONS.plus} 快速添加</h2></div>
-    <div class="stat-grid">
+    <div class="stat-grid quick-grid">
       <button class="entry" style="cursor:pointer;text-align:left" onclick="openIdeaModal()"><span class="ico" style="display:flex;align-items:center;justify-content:center;width:42px;height:42px;border-radius:11px;background:var(--accent-soft);color:var(--accent);flex:0 0 42px">${ICONS.idea}</span><span><b>记一条灵感</b><br><span style="font-size:12px;color:var(--muted)">捕捉一闪而过的想法</span></span></button>
       <button class="entry" style="cursor:pointer;text-align:left" onclick="openNoteModal()"><span class="ico" style="display:flex;align-items:center;justify-content:center;width:42px;height:42px;border-radius:11px;background:var(--amber-soft);color:var(--amber);flex:0 0 42px">${ICONS.note}</span><span><b>写一篇笔记</b><br><span style="font-size:12px;color:var(--muted)">沉淀一段完整的想法</span></span></button>
       <button class="entry" style="cursor:pointer;text-align:left" onclick="openWebModal()"><span class="ico" style="display:flex;align-items:center;justify-content:center;width:42px;height:42px;border-radius:11px;background:#E4EEF7;color:var(--sky);flex:0 0 42px">${ICONS.web}</span><span><b>收藏网站</b><br><span style="font-size:12px;color:var(--muted)">保存好文章与工具链接</span></span></button>
+      <button class="entry" style="cursor:pointer;text-align:left" onclick="openLaterModal()"><span class="ico" style="display:flex;align-items:center;justify-content:center;width:42px;height:42px;border-radius:11px;background:var(--accent-soft);color:var(--accent);flex:0 0 42px">${ICONS.later}</span><span><b>收录待看</b><br><span style="font-size:12px;color:var(--muted)">想稍后细读的文章</span></span></button>
       <button class="entry" style="cursor:pointer;text-align:left" onclick="openTaskModal()"><span class="ico" style="display:flex;align-items:center;justify-content:center;width:42px;height:42px;border-radius:11px;background:var(--danger-soft);color:var(--danger);flex:0 0 42px">${ICONS.task}</span><span><b>新建任务</b><br><span style="font-size:12px;color:var(--muted)">进入甘特图时间线</span></span></button>
     </div>
   </div>`;
@@ -1051,11 +1062,11 @@ function renderCountdown(tasks){
 }
 function recentItem(e){
   const t=e.ref;
-  const icon=e.kind==='idea'?ICONS.idea:e.kind==='note'?ICONS.note:e.kind==='web'?ICONS.web:ICONS.task;
-  const col=e.kind==='idea'?'var(--accent)':e.kind==='note'?'var(--amber)':e.kind==='web'?'var(--sky)':'var(--danger)';
-  const name=e.kind==='idea'?'灵感':e.kind==='note'?'笔记':e.kind==='web'?'书签':'任务';
-  const extra=e.kind==='web'?'<span class="meta-s" style="color:var(--sky)">'+esc(t.url)+'</span>':'';
-  return `<div class="entry" style="cursor:pointer" onclick="${e.kind==='idea'?'openIdeaModal(\''+t.id+'\')':e.kind==='note'?'openNoteDetail(\''+t.id+'\')':e.kind==='web'?'openWebModal(\''+t.id+'\')':'navigate(\'#/gantt\')'}">
+  const icon=e.kind==='idea'?ICONS.idea:e.kind==='note'?ICONS.note:e.kind==='web'?ICONS.web:e.kind==='later'?ICONS.later:ICONS.task;
+  const col=e.kind==='idea'?'var(--accent)':e.kind==='note'?'var(--amber)':e.kind==='web'?'var(--sky)':e.kind==='later'?'var(--accent)':'var(--danger)';
+  const name=e.kind==='idea'?'灵感':e.kind==='note'?'笔记':e.kind==='web'?'书签':e.kind==='later'?'待看':'任务';
+  const extra=(e.kind==='web'||e.kind==='later')?'<span class="meta-s" style="color:var(--sky)">'+esc(t.url)+'</span>':'';
+  return `<div class="entry" style="cursor:pointer" onclick="${e.kind==='idea'?'openIdeaModal(\''+t.id+'\')':e.kind==='note'?'openNoteDetail(\''+t.id+'\')':e.kind==='web'?'openWebModal(\''+t.id+'\')':e.kind==='later'?'openLaterModal(\''+t.id+'\')':'navigate(\'#/gantt\')'}">
     <span class="rail on" style="background:${col}"></span>
     <div class="body">
       <div class="title"><span class="t">${esc(t.title||t.name)}</span><span class="pill" style="background:var(--bg);color:var(--ink-2)">${name}</span></div>
@@ -1194,13 +1205,13 @@ function onEditorInput(){
   previewTimer=setTimeout(refreshPreview,160);
 }
 function viewEditor(kind,id){
-  const coll=kind==='idea'?state.ideas:kind==='note'?state.notes:state.webnotes;
+  const coll=kind==='idea'?state.ideas:kind==='note'?state.notes:kind==='web'?state.webnotes:state.readlater;
   const rec=id?coll.find(x=>x.id===id):null;
   if(id&&!rec)return '<div class="empty">这条内容已不存在</div>';
   const isNew=!rec;
-  const kindLabel=kind==='idea'?'灵感':kind==='note'?'笔记':'书签';
+  const kindLabel=kind==='idea'?'灵感':kind==='note'?'笔记':kind==='web'?'书签':'待看';
   const seriesSel=rec?(rec.seriesId||''):(editorPresetSeries||'');
-  const content=rec?(kind==='web'?(rec.excerpt||''):(rec.content||'')):'';
+  const content=rec?((kind==='web'||kind==='later')?(rec.excerpt||''):(rec.content||'')):'';
   const titleVal=rec?(rec.title||''):'';
   const imp=rec&&kind==='idea'?(rec.importance||0):0;
   let fields='';
@@ -1220,7 +1231,9 @@ function viewEditor(kind,id){
     fields='<div class="field" style="flex:1;min-width:280px"><label>网址</label><input class="input" id="ed-url" placeholder="https://…" value="'+(rec?esc(rec.url||''):'')+'"></div>'
       +'<div class="field"><label>系列</label><select class="select" id="ed-series">'+seriesOptions(seriesSel)+'</select></div>';
   }
-  const cPlace=kind==='web'?'为什么值得收藏？可以写下整段摘录或点评…':'支持 Markdown：标题、列表、引用、代码块、表格、图片…';
+  const cPlace=(kind==='web'||kind==='later')
+    ?(kind==='web'?'为什么值得收藏？可以写下整段摘录或点评…':'为什么想稍后再看？留一句提醒自己的话…')
+    :'支持 Markdown：标题、列表、引用、代码块、表格、图片…';
   const tPlace=isNew?'给这条'+kindLabel+'起个标题':'标题';
   const saveBtn='<button class="btn" onclick="saveEditor(\''+kind+'\',\''+(id||'')+'\')">保存</button>';
   return '<div class="editor">'
@@ -1231,7 +1244,7 @@ function viewEditor(kind,id){
     +'</div>'
     +'<div class="editor-meta">'+fields+'</div>'
     +'<div class="editor-grid">'
-    +'<div class="editor-pane"><div class="pane-head"><span>'+(kind==='web'?'摘录与备注':'Markdown 内容')+'</span><div class="spacer"></div>'
+    +'<div class="editor-pane"><div class="pane-head"><span>'+(kind==='web'?'摘录与备注':kind==='later'?'备注':'Markdown 内容')+'</span><div class="spacer"></div>'
     +'<button type="button" class="btn xs ghost" onclick="insertImg(\'ed-content\')">'+ICONS.img+'插入图片</button>'
     +'<span class="hint" style="font-size:11.5px">可直接粘贴截图</span></div>'
     +'<textarea class="editor-ta" id="ed-content" onpaste="pasteImg(event,\'ed-content\')" placeholder="'+esc(cPlace)+'">'+esc(content)+'</textarea></div>'
@@ -1264,15 +1277,17 @@ function titleFromBody(text){
   }
   return '';
 }
+function listRoute(kind){return kind==='idea'?'#/ideas':kind==='note'?'#/notes':kind==='web'?'#/webnotes':'#/readlater';}
 function saveEditor(kind,id){
   let title=fv('ed-title');
   const content=$('#ed-content').value;
-  if(kind==='web'){
+  if(kind==='web'||kind==='later'){
     let url=fv('ed-url');
     if(!url){toast('请填写网址');return;}
     if(!/^https?:\/\//i.test(url))url='https://'+url;
-    if(id){const w=state.webnotes.find(x=>x.id===id);Object.assign(w,{url,title:title||url,excerpt:content,seriesId:fv('ed-series')||null});}
-    else{state.webnotes.unshift({id:uid(),url,title:title||url,excerpt:content,seriesId:fv('ed-series')||null,createdAt:Date.now()});}
+    const coll=kind==='web'?state.webnotes:state.readlater;
+    if(id){const w=coll.find(x=>x.id===id);Object.assign(w,{url,title:title||url,excerpt:content,seriesId:fv('ed-series')||null});}
+    else{coll.unshift({id:uid(),url,title:title||url,excerpt:content,seriesId:fv('ed-series')||null,createdAt:Date.now()});}
   }else if(kind==='note'){
     if(!title)title=titleFromBody(content);
     if(!title){toast('请填写标题或正文');return;}
@@ -1291,11 +1306,11 @@ function saveEditor(kind,id){
   }
   editorDirty=false;
   save();
-  navigate(kind==='idea'?'#/ideas':kind==='note'?'#/notes':'#/webnotes');
-  toast(kind==='idea'?'灵感已保存':kind==='note'?'笔记已保存':'书签已保存');
+  navigate(listRoute(kind));
+  toast(kind==='idea'?'灵感已保存':kind==='note'?'笔记已保存':kind==='web'?'书签已保存':'已加入待看');
 }
 function editorBack(kind){
-  const back=kind==='idea'?'#/ideas':kind==='note'?'#/notes':'#/webnotes';
+  const back=listRoute(kind);
   if(editorDirty){confirmDialog('内容还没保存，确定离开？',()=>{editorDirty=false;navigate(back);});return;}
   navigate(back);
 }
@@ -1487,6 +1502,50 @@ function webCard(w){
 }
 function openWebModal(id){editorPresetSeries='';navigate(id?'#/webnotes/e/'+id:'#/webnotes/new');}
 function delWeb(id){confirmDialog('删除这条网站笔记？',()=>{state.webnotes=state.webnotes.filter(x=>x.id!==id);save();render();toast('已删除');});}
+
+/* ===== 待看 ===== */
+let laterSeriesFilter='';
+function viewReadLater(){
+  let list=state.readlater.slice().sort((a,b)=>b.createdAt-a.createdAt);
+  if(laterSeriesFilter)list=list.filter(w=>w.seriesId===laterSeriesFilter);
+  return `
+  <div class="toolbar">
+    <button class="btn" onclick="openLaterModal()">${ICONS.plus}添加待看</button>
+    <div class="spacer"></div>
+    <select class="select filter-select" onchange="laterSeriesFilter=this.value;render()">
+      <option value="">全部系列</option>
+      ${seriesOrdered().map(pid=>{const s=seriesById(pid);if(!s)return '';return '<option value="'+s.id+'"'+(laterSeriesFilter===s.id?' selected':'')+'>'+'　'.repeat(seriesDepth(s.id)-1)+esc(s.name)+'</option>';}).join('')}
+    </select>
+    <button class="btn ghost sm" onclick="navigate('#/search')">${ICONS.search}搜索</button>
+  </div>
+  ${list.length?`<div class="cards vertical">${list.map(laterCard).join('')}</div>`:emptyBox('待看列表是空的','把想稍后细读的文章链接存进来，看完后可以一键移到书签。','#/readlater','添加待看')}`;
+}
+function laterCard(w){
+  const host=w.url.replace(/^https?:\/\//,'').split('/')[0];
+  return `<div class="entry web-card">
+    <span class="favicon" style="color:var(--accent)">${ICONS.later}</span>
+    <div class="body">
+      <div class="title"><span class="t" style="cursor:pointer" onclick="window.open('${esc(w.url)}','_blank')">${esc(w.title)}</span></div>
+      <div class="url" title="${esc(w.url)}" onclick="window.open('${esc(w.url)}','_blank')">${ICONS.link}${esc(host)}</div>
+      ${w.excerpt?foldBody(w.id,md(w.excerpt)):''}
+      <div class="meta">${relTime(w.createdAt)}${entryMeta({ref:w})}</div>
+    </div>
+    <div class="actions">
+      <button class="icon-btn" title="在浏览器打开" onclick="window.open('${esc(w.url)}','_blank')">${ICONS.link}</button>
+      <button class="icon-btn" title="看完了，移到书签" onclick="doneLater('${w.id}')">${ICONS.check}</button>
+      <button class="icon-btn" title="编辑" onclick="openLaterModal('${w.id}')">${ICONS.edit}</button>
+      <button class="icon-btn danger" title="删除" onclick="delLater('${w.id}')">${ICONS.del}</button>
+    </div>
+  </div>`;
+}
+function openLaterModal(id,presetSeries){editorPresetSeries=presetSeries||'';navigate(id?'#/readlater/e/'+id:'#/readlater/new');}
+function delLater(id){confirmDialog('删除这条待看？',()=>{state.readlater=state.readlater.filter(x=>x.id!==id);save();render();toast('已删除');});}
+function doneLater(id){
+  const w=state.readlater.find(x=>x.id===id);if(!w)return;
+  state.webnotes.unshift({id:uid(),url:w.url,title:w.title,excerpt:w.excerpt||'',seriesId:w.seriesId,createdAt:Date.now()});
+  state.readlater=state.readlater.filter(x=>x.id!==id);
+  save();render();toast('已移到书签');
+}
 
 /* ===== 甘特图倒计时视图 ===== */
 let ganttZoom='day';
@@ -1839,6 +1898,7 @@ function delSeries(id){
     state.ideas.forEach(i=>{if(i.seriesId===id)i.seriesId=null;});
     state.notes.forEach(n=>{if(n.seriesId===id)n.seriesId=null;});
     state.webnotes.forEach(w=>{if(w.seriesId===id)w.seriesId=null;});
+    if(Array.isArray(state.readlater))state.readlater.forEach(w=>{if(w.seriesId===id)w.seriesId=null;});
     state.tasks.forEach(t=>{if(t.seriesId===id)t.seriesId=null;});
     save();render();toast('系列已删除');
   };
@@ -1859,6 +1919,7 @@ function dropAdd(kind,seriesId){
   document.querySelectorAll('.drop-menu').forEach(x=>x.classList.remove('open'));
   if(kind==='idea')openIdeaModal('',seriesId);
   else if(kind==='note')openNoteModal('',seriesId);
+  else if(kind==='later')openLaterModal('',seriesId);
 }
 function viewSeriesDetail(id){
   const s=seriesById(id);if(!s){return '<div class="empty">系列不存在</div>';}
@@ -1867,6 +1928,7 @@ function viewSeriesDetail(id){
   const ideas=state.ideas.filter(i=>i.seriesId===id);
   const notes=state.notes.filter(n=>n.seriesId===id);
   const webs=state.webnotes.filter(w=>w.seriesId===id);
+  const lates=(state.readlater||[]).filter(w=>w.seriesId===id);
   const tasks=state.tasks.filter(t=>t.seriesId===id);
   const group=(title,icon,arr,fn,vertical)=>arr.length?`<div class="section"><div class="section-head"><h2>${icon} ${title}<span style="font-size:12px;color:var(--muted);font-weight:400">${arr.length}</span></h2></div><div class="cards${vertical?' vertical':''}">${arr.map(fn).join('')}</div></div>`:'';
   return `<div class="toolbar">
@@ -1879,6 +1941,7 @@ function viewSeriesDetail(id){
       <div class="drop-menu" id="sd-add">
         <button type="button" onclick="dropAdd('idea','${id}')">${ICONS.idea}灵感</button>
         <button type="button" onclick="dropAdd('note','${id}')">${ICONS.note}笔记</button>
+        <button type="button" onclick="dropAdd('later','${id}')">${ICONS.later}待看</button>
       </div>
     </div>
   </div>
@@ -1896,8 +1959,9 @@ function viewSeriesDetail(id){
   ${group('灵感',ICONS.idea,ideas,i=>ideaCard(i),true)}
   ${group('笔记',ICONS.note,notes,n=>noteCard(n),true)}
   ${group('书签',ICONS.web,webs,w=>webCard(w))}
+  ${group('待看',ICONS.later,lates,w=>laterCard(w))}
   ${group('任务',ICONS.task,tasks,t=>taskRow(t))}
-  ${!ideas.length&&!notes.length&&!webs.length&&!tasks.length?emptyBox('这个系列还没有内容','从任意页面新建内容时选择「'+esc(s.name)+'」，就会汇总到这里。','#/ideas','去记录'):''}`;
+  ${!ideas.length&&!notes.length&&!webs.length&&!lates.length&&!tasks.length?emptyBox('这个系列还没有内容','从任意页面新建内容时选择「'+esc(s.name)+'」，就会汇总到这里。','#/ideas','去记录'):''}`;
 }
 function taskRow(t){
   const r=taskDaysLeft(t);
@@ -1920,15 +1984,16 @@ function viewSearch(){
   state.ideas.forEach(i=>{const blob=(i.title+' '+i.content+' '+(i.tags||[]).join(' ')).toLowerCase();if(blob.includes(q))hits.push({kind:'idea',ref:i,t:i.title});});
   state.notes.forEach(n=>{const blob=(n.title+' '+n.content+' '+(n.url||'')).toLowerCase();if(blob.includes(q))hits.push({kind:'note',ref:n,t:n.title});});
   state.webnotes.forEach(w=>{const blob=(w.title+' '+w.url+' '+(w.excerpt||'')).toLowerCase();if(blob.includes(q))hits.push({kind:'web',ref:w,t:w.title});});
+  state.readlater.forEach(w=>{const blob=(w.title+' '+w.url+' '+(w.excerpt||'')).toLowerCase();if(blob.includes(q))hits.push({kind:'later',ref:w,t:w.title});});
   state.tasks.forEach(t=>{const blob=(t.name+' '+(t.note||'')).toLowerCase();if(blob.includes(q))hits.push({kind:'task',ref:t,t:t.name});});
   const title=esc($('#global-search').value.trim());
-  const badge=k=>k==='idea'?'灵感':k==='note'?'笔记':k==='web'?'网站':'任务';
-  const col=k=>k==='idea'?'var(--accent)':k==='note'?'var(--amber)':k==='web'?'var(--sky)':'var(--danger)';
+  const badge=k=>k==='idea'?'灵感':k==='note'?'笔记':k==='web'?'网站':k==='later'?'待看':'任务';
+  const col=k=>k==='idea'?'var(--accent)':k==='note'?'var(--amber)':k==='web'?'var(--sky)':k==='later'?'var(--accent)':'var(--danger)';
   return `<div class="toolbar"><h2 style="font-size:15.5px">「${title}」的结果 <span style="color:var(--muted);font-weight:400;font-size:13px">${hits.length} 条</span></h2><div class="spacer"></div><button class="btn ghost sm" onclick="$('#global-search').value='';render()">清空</button></div>
   ${hits.length?`<div class="list-inline">${hits.map(h=>{
     const ref=h.ref;
-    const detail=h.kind==='web'?esc(ref.url):ref.content?esc(ref.content).slice(0,120):ref.note?esc(ref.note).slice(0,120):'';
-    return `<div class="entry" style="cursor:pointer" onclick="${h.kind==='idea'?'openIdeaModal(\''+ref.id+'\')':h.kind==='note'?'openNoteDetail(\''+ref.id+'\')':h.kind==='web'?'openWebModal(\''+ref.id+'\')':'openTaskModal(\''+ref.id+'\')'}">
+    const detail=(h.kind==='web'||h.kind==='later')?esc(ref.url):ref.content?esc(ref.content).slice(0,120):ref.note?esc(ref.note).slice(0,120):'';
+    return `<div class="entry" style="cursor:pointer" onclick="${h.kind==='idea'?'openIdeaModal(\''+ref.id+'\')':h.kind==='note'?'openNoteDetail(\''+ref.id+'\')':h.kind==='web'?'openWebModal(\''+ref.id+'\')':h.kind==='later'?'openLaterModal(\''+ref.id+'\')':'openTaskModal(\''+ref.id+'\')'}">
       <span class="rail on" style="background:${col(h.kind)}"></span>
       <div class="body">
         <div class="title"><span class="t">${highlight(ref.title||ref.name,esc($('#global-search').value.trim()))}</span><span class="pill" style="background:var(--bg);color:var(--ink-2)">${badge(h.kind)}</span></div>
@@ -2007,6 +2072,7 @@ function initEvents(){
           }).then(()=>{
             state=d;
             state.notes.forEach(n=>{if(typeof n.url==='undefined')n.url='';});
+            if(!Array.isArray(state.readlater))state.readlater=[];
             state.series.forEach(s=>{if(typeof s.parentId==='undefined')s.parentId=null;});
             normalizeSeriesOrder();
             normalizeTaskOrder();
@@ -2024,6 +2090,8 @@ async function exportData(){
   const refs=new Set();
   state.ideas.forEach(x=>collectAssets(x.content,refs));
   state.notes.forEach(x=>collectAssets(x.content,refs));
+  state.webnotes.forEach(x=>collectAssets(x.excerpt||'',refs));
+  (state.readlater||[]).forEach(x=>collectAssets(x.excerpt||'',refs));
   const images={};
   for(const id of refs){
     try{const b=await idbGet(id);if(b)images[id]={t:b.type,b:await blobToB64(b)};}catch(e){}
