@@ -922,6 +922,7 @@ function updateNav(){
 function render(){
   updateNav();
   const seg=route.replace(/^#/,'');
+  if(seg!=='/gantt')ganttScrollToToday=true;
   let html='',title='仪表盘';
   if(seg==='/'||seg===''){title=TITLES['/'];html=viewDashboard();}
   else if(seg==='/ideas'){title=TITLES['/ideas'];html=viewIdeas();}
@@ -977,6 +978,7 @@ function afterRender(){
     refreshPreview();
     ed.focus();
   }
+  if(route==='#/gantt')applyGanttScroll();
 }
 
 /* ===== 仪表盘 ===== */
@@ -1549,6 +1551,9 @@ function doneLater(id){
 
 /* ===== 甘特图倒计时视图 ===== */
 let ganttZoom='day';
+let ganttMeta=null;            // 本次渲染的 {min, pxPerDay}
+let ganttAnchor=null;          // 当前可视区中心日期（ms）
+let ganttScrollToToday=true;   // 下次渲染是否直接定位到今天
 function taskOrderCmp(a,b){
   const ao=typeof a.order==='number'?a.order:Number.MAX_SAFE_INTEGER;
   const bo=typeof b.order==='number'?b.order:Number.MAX_SAFE_INTEGER;
@@ -1647,8 +1652,9 @@ function viewGantt(){
     </div>`;
   }).join('');
   const legend=tasks.map(t=>'<span><i class="dot" style="background:'+taskColor(t)+'"></i>'+esc(t.name)+'</span>').join('');
+  ganttMeta={min:grid.min,pxPerDay:grid.pxPerDay};
   return `<div class="gantt-wrap">${head}
-    <div class="gantt-scroll" style="overflow-x:auto">
+    <div class="gantt-scroll" id="gantt-scroll" style="overflow-x:auto" onscroll="syncGanttAnchor()">
       <div class="gantt">
         <div class="gantt-labels">${labels}</div>
         <div class="gantt-tracks" style="min-width:${grid.cells*grid.cellW}px;position:relative">
@@ -1660,6 +1666,22 @@ function viewGantt(){
     </div>
     <div class="g-legend">${legend}<span><i class="dot" style="background:var(--danger)"></i>今天</span></div>
   </div>`;
+}
+function applyGanttScroll(){
+  const sc=$('#gantt-scroll');
+  if(!sc||!ganttMeta)return;
+  const today=parseDay(todayStr());
+  const anchor=ganttScrollToToday?today:(ganttAnchor||today);
+  ganttScrollToToday=false;
+  const max=Math.max(0,sc.scrollWidth-sc.clientWidth);
+  const x=(anchor-ganttMeta.min)/D*ganttMeta.pxPerDay-sc.clientWidth/2;
+  sc.scrollLeft=Math.max(0,Math.min(max,x));
+  syncGanttAnchor();
+}
+function syncGanttAnchor(){
+  const sc=$('#gantt-scroll');
+  if(!sc||!ganttMeta)return;
+  ganttAnchor=ganttMeta.min+((sc.scrollLeft+sc.clientWidth/2)/ganttMeta.pxPerDay)*D;
 }
 function ganttGrid(tasks){
   const gridDays=ganttZoom==='day'?1:ganttZoom==='week'?7:30;
@@ -1698,7 +1720,7 @@ function ganttGrid(tasks){
   }
   headHTML+='</div>';
   cellsHTML+='</div>';
-  return {min,max,totalDays,cells,cellW,pct,pctW,todayPct,headHTML,cellsHTML};
+  return {min,max,totalDays,cells,cellW,gridDays,pxPerDay:cellW/gridDays,pct,pctW,todayPct,headHTML,cellsHTML};
 }
 function taskColor(t){
   if(t&&t.color)return t.color;
