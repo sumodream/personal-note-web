@@ -667,6 +667,7 @@ function seedData(){
   const now=Date.now();
   const d=(n)=>fmtDate(now+n*D);
   const s1=uid(),s2=uid(),s3=uid();
+  const s1a=uid(),s1b=uid(),s1aa=uid(),s2a=uid();
   return {
     series:[
       {id:s1,name:'个人项目',desc:'自己正在推进的独立项目与长期计划',color:SERIES_COLORS[0],parentId:null,createdAt:now-30*D},
@@ -951,7 +952,7 @@ function afterRender(){
   const d=new Date();
   const week=['日','一','二','三','四','五','六'][d.getDay()];
   today.innerHTML='<span class="full">'+d.getFullYear()+'年'+(d.getMonth()+1)+'月'+d.getDate()+'日 · 周'+week+'</span><b>'+((d.getMonth()+1)+'/'+d.getDate())+'</b>';
-  if(route==='#/search')syncSearch();
+  // 搜索页不需要在这里再次触发渲染：syncSearch 仅绑定到搜索框的 input 事件
   initFolds();
   hydrateAssets();
   const ed=$('#ed-content');
