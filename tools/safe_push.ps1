@@ -1,4 +1,4 @@
-<#
+﻿<#
   保守推送脚本：fetch → 检查分叉/落后 → 校验入口与主产物一致 → 跑测试 → 不带 force 推送
   用法：.\tools\safe_push.ps1        正常推送
         .\tools\safe_push.ps1 -SkipTests   跳过测试（仅限紧急，慎重）
