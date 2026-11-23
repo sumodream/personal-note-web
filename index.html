@@ -2141,7 +2141,7 @@ async function exportData(){
   toast('已导出备份文件'+(refs.size?'（含 '+refs.size+' 张图片）':''));
 }
 
-/* ===== 云同步（Cloudflare Worker + R2） ===== */
+/* ===== 云同步（GitHub 私有仓库 / Cloudflare Worker + R2） ===== */
 function normSyncUrl(u){
   let s=String(u||'').trim();
   if(!s)return '';
@@ -2149,17 +2149,34 @@ function normSyncUrl(u){
   s=s.replace(/\/+$/,'').replace(/\/api\/sync$/i,'');
   return s;
 }
+function normRepo(s){
+  let t=String(s||'').trim();
+  t=t.replace(/^https?:\/\/github\.com\//i,'').replace(/\.git$/i,'').replace(/\/+$/,'');
+  t=t.replace(/\s+/g,'');
+  return t;
+}
 function loadSyncCfg(){
   try{
     const raw=localStorage.getItem(SYNC_KEY);if(!raw)return null;
-    const c=JSON.parse(raw);if(!c||!c.endpoint)return null;
+    const c=JSON.parse(raw);if(!c)return null;
     syncMeta={version:c.version||'',savedAt:c.savedAt||0,lastError:''};
-    return {endpoint:normSyncUrl(c.endpoint),token:c.token||''};
+    const provider=c.provider==='r2'?'r2':(c.provider==='github'?'github':(c.endpoint&&!c.repo?'r2':'github'));
+    if(provider==='github'){
+      const repo=normRepo(c.repo||'');
+      if(!repo)return null;
+      return {provider:'github',repo:repo,path:(c.path||'state.json'),branch:(c.branch||'main'),token:c.token||'',endpoint:''};
+    }
+    if(!c.endpoint)return null;
+    return {provider:'r2',endpoint:normSyncUrl(c.endpoint),token:c.token||'',repo:'',path:'state.json',branch:'main'};
   }catch(e){return null;}
 }
 function persistSyncCfg(){
   try{
-    localStorage.setItem(SYNC_KEY,JSON.stringify({endpoint:syncCfg?syncCfg.endpoint:'',token:syncCfg?syncCfg.token:'',version:syncMeta.version,savedAt:syncMeta.savedAt}));
+    const c=syncCfg||{};
+    localStorage.setItem(SYNC_KEY,JSON.stringify({
+      provider:c.provider||'github',repo:c.repo||'',path:c.path||'state.json',branch:c.branch||'main',
+      endpoint:c.endpoint||'',token:c.token||'',version:syncMeta.version,savedAt:syncMeta.savedAt
+    }));
   }catch(e){}
 }
 function updateSyncBadge(){
@@ -2171,20 +2188,17 @@ function updateSyncBadge(){
   else{dot.classList.add('ok');dot.title='已同步';}
 }
 function syncStatusText(){
-  if(!syncCfg)return '<span style="color:var(--muted)">未开启云同步，填写下面的地址与口令即可启用</span>';
-  const bits=[syncDirty?'本机有改动，等待上传':'本机与云端一致'];
+  if(!syncCfg)return '<span style="color:var(--muted)">未开启云同步，选择存储方式并填写参数即可启用</span>';
+  const bits=[syncCfg.provider==='github'?('GitHub '+syncCfg.repo):'Cloudflare R2'];
+  bits.push(syncDirty?'本机有改动，等待上传':'本机与云端一致');
   if(syncMeta.savedAt)bits.push('上次同步 '+new Date(syncMeta.savedAt).toLocaleString());
   let h=esc(bits.join(' · '));
   if(syncMeta.lastError)h+='<div style="color:var(--danger);margin-top:4px">上次失败：'+esc(syncMeta.lastError)+'</div>';
   return h;
 }
-async function syncCall(method,body){
-  if(!syncCfg)throw new Error('未配置同步');
-  const url=syncCfg.endpoint+'/api/sync';
+async function apiFetch(url,opt){
   const ctrl=(typeof AbortController!=='undefined')?new AbortController():null;
-  const timer=ctrl?setTimeout(()=>ctrl.abort(),15000):null;
-  const opt={method,headers:{'Authorization':'Bearer '+(syncCfg.token||'')}};
-  if(body!==undefined){opt.headers['Content-Type']='application/json';opt.body=JSON.stringify(body);}
+  const timer=ctrl?setTimeout(()=>ctrl.abort(),20000):null;
   if(ctrl)opt.signal=ctrl.signal;
   try{
     const res=await fetch(url,opt);
@@ -2192,26 +2206,120 @@ async function syncCall(method,body){
     return {status:res.status,json};
   }finally{if(timer)clearTimeout(timer);}
 }
+function b64encode(str){
+  const bytes=new TextEncoder().encode(str);
+  let bin='';const CH=0x8000;
+  for(let i=0;i<bytes.length;i+=CH)bin+=String.fromCharCode.apply(null,bytes.subarray(i,i+CH));
+  return btoa(bin);
+}
+function b64decode(b64){
+  const bin=atob(String(b64||'').replace(/\s+/g,''));
+  const bytes=new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++)bytes[i]=bin.charCodeAt(i);
+  return new TextDecoder('utf-8').decode(bytes);
+}
+
+/* --- Cloudflare Worker + R2 --- */
+async function r2Push(force){
+  const r=await apiFetch(syncCfg.endpoint+'/api/sync',{
+    method:'PUT',
+    headers:{'Authorization':'Bearer '+(syncCfg.token||''),'Content-Type':'application/json'},
+    body:JSON.stringify({data:state,baseVersion:force?'':syncMeta.version,force:!!force})
+  });
+  if(r.status===200&&r.json&&r.json.ok)return {kind:'ok',version:r.json.version,savedAt:r.json.savedAt};
+  if(r.status===409)return {kind:'conflict',version:(r.json&&r.json.version)||'',savedAt:(r.json&&r.json.savedAt)||0,data:(r.json&&r.json.data)||null};
+  if(r.status===401)return {kind:'error',msg:'口令不正确（401）'};
+  return {kind:'error',msg:'HTTP '+r.status};
+}
+async function r2Pull(){
+  const r=await apiFetch(syncCfg.endpoint+'/api/sync',{
+    method:'GET',headers:{'Authorization':'Bearer '+(syncCfg.token||'')}
+  });
+  if(r.status===404||(r.json&&r.json.empty))return {kind:'empty'};
+  if(r.status===401)return {kind:'error',msg:'口令不正确（401）'};
+  if(r.status!==200||!r.json||!r.json.data)return {kind:'error',msg:'HTTP '+r.status};
+  return {kind:'ok',version:r.json.version||'',savedAt:r.json.savedAt||0,data:r.json.data};
+}
+
+/* --- GitHub 私有仓库（contents API，sha 做乐观锁） --- */
+function ghHeaders(){
+  return {
+    'Authorization':'Bearer '+(syncCfg.token||''),
+    'Accept':'application/vnd.github+json',
+    'Content-Type':'application/json',
+    'X-GitHub-Api-Version':'2022-11-28'
+  };
+}
+function ghUrl(){
+  const path=String(syncCfg.path||'state.json').replace(/^\/+/,'');
+  return 'https://api.github.com/repos/'+syncCfg.repo+'/contents/'+path+'?ref='+encodeURIComponent(syncCfg.branch||'main');
+}
+async function ghGet(){
+  const r=await apiFetch(ghUrl(),{method:'GET',headers:ghHeaders()});
+  if(r.status===404)return {kind:'empty'};
+  if(r.status===401)return {kind:'error',msg:'Token 无效（401）'};
+  if(r.status===403){
+    const m=(r.json&&r.json.message)||'';
+    return {kind:'error',msg:/rate limit/i.test(m)?'GitHub 请求过于频繁（403）':'权限不足或限流（403）'};
+  }
+  if(r.status!==200||!r.json)return {kind:'error',msg:'HTTP '+r.status};
+  let payload=null;
+  try{
+    const raw=r.json.content?b64decode(r.json.content):'';
+    payload=raw?JSON.parse(raw):null;
+  }catch(e){payload=null;}
+  if(!payload||!payload.data)return {kind:'error',msg:'云端内容无法解析'};
+  return {kind:'ok',version:r.json.sha||'',savedAt:payload.savedAt||0,data:payload.data};
+}
+async function ghPush(force){
+  let base=force?'':(syncMeta.version||'');
+  const now=Date.now();
+  const payload=JSON.stringify({savedAt:now,data:state});
+  if(!base){
+    // 本地没有基准 sha：先看远端有没有文件
+    const g=await ghGet();
+    if(g.kind==='ok'){
+      if(!force)return {kind:'conflict',version:g.version,savedAt:g.savedAt,data:g.data};
+      base=g.version;
+    }else if(g.kind==='error'){
+      return g;
+    }
+  }
+  const body={message:'sync '+new Date(now).toISOString(),content:b64encode(payload),branch:syncCfg.branch||'main'};
+  if(base)body.sha=base;
+  const r=await apiFetch(ghUrl(),{method:'PUT',headers:ghHeaders(),body:JSON.stringify(body)});
+  if((r.status===200||r.status===201))return {kind:'ok',version:(r.json&&r.json.content&&r.json.content.sha)||base,savedAt:now};
+  if(r.status===409||r.status===422){
+    const g=await ghGet();
+    return {kind:'conflict',version:(g.kind==='ok'&&g.version)||'',savedAt:(g.kind==='ok'&&g.savedAt)||0,data:(g.kind==='ok'&&g.data)||null};
+  }
+  if(r.status===401)return {kind:'error',msg:'Token 无效（401）'};
+  if(r.status===403)return {kind:'error',msg:'权限不足或限流（403）'};
+  if(r.status===404)return {kind:'error',msg:'仓库或分支不存在（404）'};
+  return {kind:'error',msg:'HTTP '+r.status};
+}
+async function ghPull(){
+  return await ghGet();
+}
 async function doPush(force){
   if(!syncCfg)return 'noconfig';
   if(syncBusy)return 'busy';
   syncBusy=true;
   try{
-    const r=await syncCall('PUT',{data:state,baseVersion:force?'':syncMeta.version,force:!!force});
-    if(r.status===200&&r.json&&r.json.ok){
-      syncMeta.version=r.json.version||syncMeta.version;
-      syncMeta.savedAt=r.json.savedAt||Date.now();
+    const r=syncCfg.provider==='r2'?await r2Push(force):await ghPush(force);
+    if(r.kind==='ok'){
+      syncMeta.version=r.version||syncMeta.version;
+      syncMeta.savedAt=r.savedAt||Date.now();
       syncMeta.lastError='';
       syncDirty=false;
       persistSyncCfg();
       return 'ok';
     }
-    if(r.status===409){
-      syncPending={data:(r.json&&r.json.data)||null,version:(r.json&&r.json.version)||'',savedAt:(r.json&&r.json.savedAt)||0};
+    if(r.kind==='conflict'){
+      syncPending={data:r.data||null,version:r.version||'',savedAt:r.savedAt||0};
       return 'conflict';
     }
-    if(r.status===401){syncMeta.lastError='口令不正确（401）';persistSyncCfg();return 'error';}
-    syncMeta.lastError='HTTP '+r.status;persistSyncCfg();
+    syncMeta.lastError=r.msg||'未知错误';persistSyncCfg();
     return 'error';
   }catch(e){
     syncMeta.lastError=(e&&e.name==='AbortError')?'请求超时':((e&&e.message)||'网络错误');
@@ -2224,11 +2332,10 @@ async function doPull(){
   if(syncBusy)return 'busy';
   syncBusy=true;
   try{
-    const r=await syncCall('GET');
-    if(r.status===404||(r.json&&r.json.empty)){syncMeta.lastError='';return 'empty';}
-    if(r.status===401){syncMeta.lastError='口令不正确（401）';persistSyncCfg();return 'error';}
-    if(r.status!==200||!r.json||!r.json.data){syncMeta.lastError='HTTP '+r.status;persistSyncCfg();return 'error';}
-    const env={data:r.json.data,version:r.json.version||'',savedAt:r.json.savedAt||0};
+    const r=syncCfg.provider==='r2'?await r2Pull():await ghPull();
+    if(r.kind==='empty'){syncMeta.lastError='';persistSyncCfg();return 'empty';}
+    if(r.kind==='error'){syncMeta.lastError=r.msg||'未知错误';persistSyncCfg();return 'error';}
+    const env={data:r.data,version:r.version||'',savedAt:r.savedAt||0};
     if(JSON.stringify(env.data)===JSON.stringify(state)){
       syncMeta.version=env.version||syncMeta.version;
       syncMeta.savedAt=env.savedAt||syncMeta.savedAt;
@@ -2318,14 +2425,34 @@ function syncConflictUseRemote(){
   closeModal();
   if(applyRemote(p))toast('已采用云端数据');
 }
+function syncProviderChange(){
+  const sel=$('#sy-provider');const p=sel?sel.value:'github';
+  const gh=$('#sy-gh-box'),r2=$('#sy-r2-box');
+  if(gh)gh.style.display=p==='github'?'':'none';
+  if(r2)r2.style.display=p==='github'?'none':'';
+}
 function openSyncModal(){
-  const c=syncCfg||{endpoint:'',token:''};
-  openModal(`<div class="modal" style="max-width:520px">
+  const c=syncCfg||{provider:'github',repo:'',path:'state.json',branch:'main',endpoint:'',token:''};
+  const isGh=c.provider!=='r2';
+  openModal(`<div class="modal" style="max-width:560px">
     <div class="modal-head"><h3>云同步</h3><button class="icon-btn" onclick="closeModal()">${ICONS.del}</button></div>
     <div class="modal-body">
-      <div class="field"><label>Worker 地址</label><input class="input" id="sy-url" placeholder="https://idea-sync.你的子域.workers.dev" value="${esc(c.endpoint||'')}"></div>
-      <div class="field"><label>同步口令</label><input class="input" id="sy-token" type="password" placeholder="与 Worker 的 SYNC_TOKEN 一致" value="${esc(c.token||'')}"></div>
-      <div style="font-size:12.5px;color:var(--muted);line-height:1.75;margin-top:6px">只同步文字数据，图片仍留在本机浏览器里，换设备后图片不会跟着走。改动后会自动上传（约 2.5 秒内），另有每 60 秒的兜底检查。</div>
+      <div class="field"><label>存储方式</label><select class="input" id="sy-provider" onchange="syncProviderChange()">
+        <option value="github"${isGh?' selected':''}>GitHub 私有仓库（推荐，无需部署）</option>
+        <option value="r2"${isGh?'':' selected'}>Cloudflare Worker + R2</option>
+      </select></div>
+      <div id="sy-gh-box" style="display:${isGh?'':'none'}">
+        <div class="field"><label>仓库</label><input class="input" id="sy-repo" placeholder="owner/repo，如 sumodream/personal-note-data" value="${esc(c.repo||'')}"></div>
+        <div class="field"><label>文件路径 <span class="hint">留空则为 state.json</span></label><input class="input" id="sy-path" placeholder="state.json" value="${esc(c.path||'state.json')}"></div>
+        <div class="field"><label>分支 <span class="hint">默认 main</span></label><input class="input" id="sy-branch" placeholder="main" value="${esc(c.branch||'main')}"></div>
+        <div class="field"><label>GitHub Token</label><input class="input" id="sy-token" type="password" placeholder="ghp_…（需对该仓库有 Contents 读写权限）" value="${esc(c.token||'')}"></div>
+        <div style="font-size:12.5px;color:var(--muted);line-height:1.75">仓库要设成私有，否则数据等于公开。Token 建议用 fine-grained，只授权这一个仓库的 Contents 读写。</div>
+      </div>
+      <div id="sy-r2-box" style="display:${isGh?'none':''}">
+        <div class="field"><label>Worker 地址</label><input class="input" id="sy-url" placeholder="https://idea-sync.你的子域.workers.dev" value="${esc(c.endpoint||'')}"></div>
+        <div class="field"><label>同步口令</label><input class="input" id="sy-token-r2" type="password" placeholder="与 Worker 的 SYNC_TOKEN 一致" value="${esc(c.endpoint?c.token:'')}"></div>
+      </div>
+      <div style="font-size:12.5px;color:var(--muted);line-height:1.75;margin-top:6px">只同步文字数据，图片仍留在本机浏览器里，换设备后图片不会跟着走。改动后自动上传（约 2.5 秒内），另有每 60 秒兜底检查。</div>
       <div style="font-size:12.5px;line-height:1.7;margin-top:10px">状态：${syncStatusText()}</div>
       <div class="modal-foot" style="flex-wrap:wrap;gap:8px">
         <button class="btn ghost" onclick="syncClear()">清除配置</button>
@@ -2337,12 +2464,25 @@ function openSyncModal(){
   </div>`);
 }
 function syncSaveForm(){
-  const url=normSyncUrl($('#sy-url').value),tok=($('#sy-token').value||'').trim();
-  if(!url){toast('请填写 Worker 地址');return;}
-  if(!/^https?:\/\//i.test(url)){toast('地址格式不对，应为 https://…');return;}
-  const changed=!syncCfg||syncCfg.endpoint!==url;
-  syncCfg={endpoint:url,token:tok};
-  if(changed)syncMeta.version='';
+  const p=$('#sy-provider')?$('#sy-provider').value:'github';
+  if(p==='github'){
+    const repo=normRepo($('#sy-repo').value);
+    if(!/^[\w.-]+\/[\w.-]+$/.test(repo)){toast('仓库格式应为 owner/repo');return;}
+    const tok=($('#sy-token').value||'').trim();
+    if(!tok){toast('请填写 GitHub Token');return;}
+    const path=(($('#sy-path').value||'state.json').trim()||'state.json').replace(/^\/+/,'');
+    const branch=(($('#sy-branch').value||'main').trim()||'main');
+    const changed=!syncCfg||syncCfg.provider!=='github'||syncCfg.repo!==repo||syncCfg.path!==path||syncCfg.branch!==branch;
+    syncCfg={provider:'github',repo:repo,path:path,branch:branch,token:tok,endpoint:''};
+    if(changed)syncMeta.version='';
+  }else{
+    const url=normSyncUrl($('#sy-url').value);
+    if(!url||!/^https?:\/\//i.test(url)){toast('Worker 地址格式不对，应为 https://…');return;}
+    const tok=($('#sy-token-r2').value||'').trim();
+    const changed=!syncCfg||syncCfg.provider!=='r2'||syncCfg.endpoint!==url;
+    syncCfg={provider:'r2',endpoint:url,token:tok,repo:'',path:'state.json',branch:'main'};
+    if(changed)syncMeta.version='';
+  }
   persistSyncCfg();updateSyncBadge();closeModal();
   toast('配置已保存，正在同步…');
   syncInitial();

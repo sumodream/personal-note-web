@@ -1,56 +1,81 @@
-# 灵感工作台 · 云同步部署说明
+# 灵感工作台 · 云同步配置说明
 
-一套 Cloudflare Worker + R2 的最简同步后端：前端整份 `state` JSON 存进 R2 的一个对象，靠 `version` 做覆盖冲突检测。
+两种存储后端，页面里选一种即可：
 
-## 一、部署（一次性，约 5 分钟）
+- **GitHub 私有仓库（推荐）**：不用部署任何服务，只要一个 Token。
+- **Cloudflare Worker + R2**：需要自己部署 Worker，见文末附录。
 
-在 `cloudflare-sync` 目录执行：
+只同步文字数据。正文里的图片存在本机 IndexedDB，只同步 `![图片](asset:img_xxx)` 占位符，换设备能看到文字、看不到图。
+
+---
+
+## 一、GitHub 私有仓库（推荐）
+
+### 1. 建一个私有仓库
+
+GitHub → New repository → 名字随意（如 `personal-note-data`）→ **必须选 Private** → 勾选 Add a README（让默认分支存在）→ Create。
+
+仓库必须私有：公开仓库里的文件任何人都能读，数据就等于公开了。
+
+### 2. 建 Token
+
+推荐 fine-grained token：右上头像 → Settings → Developer settings → Personal access tokens → Fine-grained tokens → Generate new token
+
+- Repository access：Only select repositories → 只选刚建的那个仓库
+- Permissions：Repository permissions → **Contents: Read and write**（其余不用给）
+
+生成的串以 `github_pat_` 或 `ghp_` 开头，只显示一次，复制下来。
+
+### 3. 在工作台里填
+
+侧栏底部「云同步」→ 存储方式选 GitHub → 仓库填 `你的用户名/personal-note-data` → 路径留空（默认 `state.json`）→ 分支 `main` → 粘贴 Token → 保存并同步。
+
+云端为空时会把本机数据推上去；云端已有数据且本机也有内容时，会弹窗让你选保留哪一边。
+
+---
+
+## 二、同步机制与状态
+
+- 打开页面自动拉取一次；本机改动后约 2.5 秒自动上传，另有每 60 秒兜底检查。
+- 侧栏「云同步」右侧小圆点：无点=未配置，橙=有改动待上传，绿=已同步，红=上次失败。
+- 冲突检测：GitHub 用文件 sha 做乐观锁，sha 变了就返回冲突，不会静默覆盖别的设备。
+
+接口约定：
+
+```
+GET  https://api.github.com/repos/{repo}/contents/{path}?ref={branch}
+     → 200 {sha, content(base64)} ｜ 404 文件不存在
+PUT  同一地址
+     body {message, content(base64 of {savedAt, data}), branch, sha?}
+     → 200/201 {content:{sha}} ｜ 409 sha 不匹配 ｜ 422 缺 sha
+请求头 Authorization: Bearer <token>，Accept: application/vnd.github+json
+```
+
+## 三、额度与限制
+
+- 带 Token 的请求限额 5,000 次/小时，单人使用远远够（每次同步 1~2 个请求）。
+- 单文件 100 MB 上限；整份 JSON 通常几十 KB。
+- 每次同步产生一个 commit，仓库历史会变长但不影响使用；介意可以定期重建仓库。
+
+## 四、已知取舍
+
+- 图片不跨设备。
+- 冲突粒度是整份数据，不做字段级合并。多设备交替用，建议等圆点变绿再换设备。
+- Token 存在浏览器 localStorage，与数据同源。`file://` 与 `https://` 是不同来源，配置和数据互不相通，建议固定一种打开方式。
+
+---
+
+## 附录：Cloudflare Worker + R2（可选）
+
+`cloudflare-sync` 目录已备好 Worker 代码与 `wrangler.toml`：
 
 ```powershell
 npx wrangler login
 npx wrangler r2 bucket create idea-studio
-npx wrangler secret put SYNC_TOKEN   # 粘贴一个足够长的随机串，比如 openssl rand -hex 24
+npx wrangler secret put SYNC_TOKEN
 npx wrangler deploy
 ```
 
-`deploy` 会打印 Worker 地址，形如 `https://idea-studio-sync.<你的子域>.workers.dev`。
+Worker 接口：`GET/PUT /api/sync`，`Authorization: Bearer <SYNC_TOKEN>`，R2 存单一对象（默认 `state.json`），PUT 带 `baseVersion` 做冲突检测，冲突返回 409 时前端同样弹选择框。
 
-> 第一次用 `npx wrangler` 时，它可能提示安装包，直接同意即可。需要 Node 18+。
-> 如果 Node 在 `file://` 页面下访问 Worker 报 CORS，本 Worker 已返回 `Access-Control-Allow-Origin: *`，正常无需改动。
-
-## 二、前端启用
-
-打开「灵感工作台」→ 侧栏底部 **云同步** → 填：
-
-- **Worker 地址**：`https://idea-studio-sync.xxx.workers.dev`（不用带 `/api/sync`，会自动剥掉）
-- **同步口令**：与 `SYNC_TOKEN` 一致
-
-点「保存并同步」。云端为空则把本机数据上传；云端有数据且本机也有内容时会弹冲突窗口让你选。
-
-侧栏按钮右侧的小圆点表示状态：无点=未配置，橙=有改动待上传，绿=已同步，红=上次失败。
-
-## 三、接口约定
-
-```
-GET  /api/sync   → 200 {version, savedAt, data} ｜ 404 {empty:true}
-PUT  /api/sync   → body {data, baseVersion, force}
-                   → 200 {ok:true, version, savedAt}
-                   → 409 {conflict:true, version, savedAt, data}
-                   → 401 口令不匹配
-请求头：Authorization: Bearer <SYNC_TOKEN>
-```
-
-`baseVersion` 与云端当前 `version` 不一致且 `force` 不为 `true` 时返回 409，前端据此弹冲突选择框；`force=true` 直接覆盖。
-
-## 四、费用与限制
-
-- Workers Free：100,000 请求/天。本方案每次同步 1 个请求，60 秒兜底轮询只在有改动时才发，日常用量远低于额度。
-- R2 Free：10 GB 存储、Class A（写）1,000 万次/月、Class B（读）1,000 万次/月。整份 JSON 几十 KB 级，完全够用。
-- 单次请求体上限：Workers 免费版 100 MB 请求体，数据量远达不到。
-
-## 五、已知取舍
-
-- **图片不同步**：正文里的图片存在本机 IndexedDB，只同步文字与占位符 `![图片](asset:img_xxx)`。换设备能看到文字但看不到图；需要图片也跨设备，得另加对象存储通道。
-- **冲突粒度是整份数据**：不做字段级合并。两端同时改会由你选一边，另一边被覆盖。多设备交替使用时，建议每次改完等圆点变绿再换设备。
-- **口令存在 localStorage**：与数据同源。如果页面同时用 `file://` 和 `https://` 打开，两边的配置互不相通，需各自填一次。
-- 没有服务端历史版本；想要回滚，靠侧栏「导出备份」的 JSON。
+注意：`wrangler login` 的 OAuth 回调走 `localhost:8976`，如果本机浏览器/防火墙/代理拦住了这个回调，会一直报「Timed out waiting for authorization code」。遇到这种情况改用 `CLOUDFLARE_API_TOKEN` 环境变量部署，或直接走上面的 GitHub 方案。
