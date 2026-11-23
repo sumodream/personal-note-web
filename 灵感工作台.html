@@ -124,6 +124,10 @@ svg{display:block}
 .nav-group{font-size:11px;letter-spacing:1.5px;color:var(--sidebar-muted);opacity:.6;padding:16px 11px 6px;font-weight:600}
 .sidebar-foot{border-top:1px solid rgba(255,255,255,.08);padding-top:10px;display:flex;flex-direction:column;gap:2px}
 .sidebar-foot .nav-item{font-size:13.5px}
+.sync-dot{width:7px;height:7px;border-radius:50%;margin-left:auto;background:var(--faint);flex:0 0 7px}
+.sync-dot.dirty{background:var(--amber)}
+.sync-dot.ok{background:var(--accent)}
+.sync-dot.err{background:var(--danger)}
 .series-mini{display:flex;flex-direction:column;gap:2px;padding-bottom:8px}
 
 /* ===== 顶栏 ===== */
@@ -496,6 +500,7 @@ mark{background:var(--mark-bg);color:inherit;border-radius:2px;padding:0 1px}
     </nav>
     <div class="sidebar-foot">
       <button class="nav-item" id="btn-theme"><svg id="theme-ico-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg><svg id="theme-ico-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="display:none"><circle cx="12" cy="12" r="4.2"/><path d="M12 2v2.5M12 19.5V22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M2 12h2.5M19.5 12H22M4.9 19.1l1.8-1.8M17.3 6.7l1.8-1.8"/></svg><span id="theme-label">深色模式</span></button>
+      <button class="nav-item" id="btn-sync"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 18.5a4.3 4.3 0 0 1 .3-8.6A5.4 5.4 0 0 1 17.7 12a3.3 3.3 0 0 1-1 6.5z"/><path d="M12 20v-5m0 0-2.4 2.4M12 15l2.4 2.4"/></svg><span>云同步</span><span class="sync-dot" id="sync-dot"></span></button>
       <button class="nav-item" id="btn-export"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0 4-4m-4 4-4-4"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>导出备份</button>
       <button class="nav-item" id="btn-import"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3m0 0 4 4m-4-4-4 4"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>导入备份</button>
       <button class="nav-item" id="btn-reset"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>恢复示例数据</button>
@@ -655,13 +660,18 @@ const ICONS={
   folder:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>',
   inbox:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.5 5h13l3.5 7v5a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-5z"/></svg>',
   img:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>',
-  grip:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="9" cy="6" r="1.3"/><circle cx="15" cy="6" r="1.3"/><circle cx="9" cy="12" r="1.3"/><circle cx="15" cy="12" r="1.3"/><circle cx="9" cy="18" r="1.3"/><circle cx="15" cy="18" r="1.3"/></svg>'
+  grip:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="9" cy="6" r="1.3"/><circle cx="15" cy="6" r="1.3"/><circle cx="9" cy="12" r="1.3"/><circle cx="15" cy="12" r="1.3"/><circle cx="9" cy="18" r="1.3"/><circle cx="15" cy="18" r="1.3"/></svg>',
+  cloud:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 18.5a4.3 4.3 0 0 1 .3-8.6A5.4 5.4 0 0 1 17.7 12a3.3 3.3 0 0 1-1 6.5z"/><path d="M12 20v-5m0 0-2.4 2.4M12 15l2.4 2.4"/></svg>'
 };
 
 /* ===== 数据与存储 ===== */
 const LS_KEY='idea-studio-v1';
 const SERIES_COLORS=['#2F7D6A','#C98A2D','#C65A4A','#3E7CB1','#7A8B3C','#8B5E8C','#A0583C','#4E7A91','#B0607A','#5C6BC0'];
 let state=null;
+/* 云同步状态（提前声明，避免 save() 早于声明执行时踩到 TDZ） */
+const SYNC_KEY='idea-studio-sync';
+let syncCfg=null,syncDirty=false,syncBusy=false,syncTimer=null,syncPending=null;
+let syncMeta={version:'',savedAt:0,lastError:''};
 
 function seedData(){
   const now=Date.now();
@@ -727,6 +737,7 @@ function save(){
     if(e&&e.name==='QuotaExceededError')toast('保存失败：存储空间不足，请缩小图片或删除部分内容');
     else toast('保存失败：浏览器存储不可用');
   }
+  if(initDone&&typeof syncCfg!=='undefined'&&syncCfg){syncDirty=true;updateSyncBadge();schedulePush();}
 }
 function doUndo(){
   if(!undoStack.length){toast('没有可撤销的操作');return;}
@@ -2071,6 +2082,7 @@ function initEvents(){
   gs.addEventListener('input',()=>{clearTimeout(t);t=setTimeout(()=>{if(route==='#/search')render();},200);});
   gs.addEventListener('keydown',e=>{if(e.key==='Enter'){navigate('#/search');}});
   $('#btn-export').addEventListener('click',exportData);
+  const bs=$('#btn-sync');if(bs)bs.addEventListener('click',openSyncModal);
   $('#btn-import').addEventListener('click',()=>$('#file-import').click());
   $('#btn-reset').addEventListener('click',()=>{
     confirmDialog('将清空当前全部数据并恢复为示例数据，确定？',()=>{
@@ -2129,11 +2141,244 @@ async function exportData(){
   toast('已导出备份文件'+(refs.size?'（含 '+refs.size+' 张图片）':''));
 }
 
+/* ===== 云同步（Cloudflare Worker + R2） ===== */
+function normSyncUrl(u){
+  let s=String(u||'').trim();
+  if(!s)return '';
+  if(!/^[a-z]+:\/\//i.test(s))s='https://'+s;
+  s=s.replace(/\/+$/,'').replace(/\/api\/sync$/i,'');
+  return s;
+}
+function loadSyncCfg(){
+  try{
+    const raw=localStorage.getItem(SYNC_KEY);if(!raw)return null;
+    const c=JSON.parse(raw);if(!c||!c.endpoint)return null;
+    syncMeta={version:c.version||'',savedAt:c.savedAt||0,lastError:''};
+    return {endpoint:normSyncUrl(c.endpoint),token:c.token||''};
+  }catch(e){return null;}
+}
+function persistSyncCfg(){
+  try{
+    localStorage.setItem(SYNC_KEY,JSON.stringify({endpoint:syncCfg?syncCfg.endpoint:'',token:syncCfg?syncCfg.token:'',version:syncMeta.version,savedAt:syncMeta.savedAt}));
+  }catch(e){}
+}
+function updateSyncBadge(){
+  const dot=$('#sync-dot');if(!dot)return;
+  dot.className='sync-dot';
+  if(!syncCfg){dot.title='未开启云同步';return;}
+  if(syncMeta.lastError){dot.classList.add('err');dot.title='同步失败：'+syncMeta.lastError;}
+  else if(syncDirty){dot.classList.add('dirty');dot.title='有改动待上传';}
+  else{dot.classList.add('ok');dot.title='已同步';}
+}
+function syncStatusText(){
+  if(!syncCfg)return '<span style="color:var(--muted)">未开启云同步，填写下面的地址与口令即可启用</span>';
+  const bits=[syncDirty?'本机有改动，等待上传':'本机与云端一致'];
+  if(syncMeta.savedAt)bits.push('上次同步 '+new Date(syncMeta.savedAt).toLocaleString());
+  let h=esc(bits.join(' · '));
+  if(syncMeta.lastError)h+='<div style="color:var(--danger);margin-top:4px">上次失败：'+esc(syncMeta.lastError)+'</div>';
+  return h;
+}
+async function syncCall(method,body){
+  if(!syncCfg)throw new Error('未配置同步');
+  const url=syncCfg.endpoint+'/api/sync';
+  const ctrl=(typeof AbortController!=='undefined')?new AbortController():null;
+  const timer=ctrl?setTimeout(()=>ctrl.abort(),15000):null;
+  const opt={method,headers:{'Authorization':'Bearer '+(syncCfg.token||'')}};
+  if(body!==undefined){opt.headers['Content-Type']='application/json';opt.body=JSON.stringify(body);}
+  if(ctrl)opt.signal=ctrl.signal;
+  try{
+    const res=await fetch(url,opt);
+    let json=null;try{json=await res.json();}catch(e){}
+    return {status:res.status,json};
+  }finally{if(timer)clearTimeout(timer);}
+}
+async function doPush(force){
+  if(!syncCfg)return 'noconfig';
+  if(syncBusy)return 'busy';
+  syncBusy=true;
+  try{
+    const r=await syncCall('PUT',{data:state,baseVersion:force?'':syncMeta.version,force:!!force});
+    if(r.status===200&&r.json&&r.json.ok){
+      syncMeta.version=r.json.version||syncMeta.version;
+      syncMeta.savedAt=r.json.savedAt||Date.now();
+      syncMeta.lastError='';
+      syncDirty=false;
+      persistSyncCfg();
+      return 'ok';
+    }
+    if(r.status===409){
+      syncPending={data:(r.json&&r.json.data)||null,version:(r.json&&r.json.version)||'',savedAt:(r.json&&r.json.savedAt)||0};
+      return 'conflict';
+    }
+    if(r.status===401){syncMeta.lastError='口令不正确（401）';persistSyncCfg();return 'error';}
+    syncMeta.lastError='HTTP '+r.status;persistSyncCfg();
+    return 'error';
+  }catch(e){
+    syncMeta.lastError=(e&&e.name==='AbortError')?'请求超时':((e&&e.message)||'网络错误');
+    persistSyncCfg();
+    return 'error';
+  }finally{syncBusy=false;updateSyncBadge();}
+}
+async function doPull(){
+  if(!syncCfg)return 'noconfig';
+  if(syncBusy)return 'busy';
+  syncBusy=true;
+  try{
+    const r=await syncCall('GET');
+    if(r.status===404||(r.json&&r.json.empty)){syncMeta.lastError='';return 'empty';}
+    if(r.status===401){syncMeta.lastError='口令不正确（401）';persistSyncCfg();return 'error';}
+    if(r.status!==200||!r.json||!r.json.data){syncMeta.lastError='HTTP '+r.status;persistSyncCfg();return 'error';}
+    const env={data:r.json.data,version:r.json.version||'',savedAt:r.json.savedAt||0};
+    if(JSON.stringify(env.data)===JSON.stringify(state)){
+      syncMeta.version=env.version||syncMeta.version;
+      syncMeta.savedAt=env.savedAt||syncMeta.savedAt;
+      syncMeta.lastError='';syncDirty=false;persistSyncCfg();
+      return 'same';
+    }
+    syncPending=env;syncMeta.lastError='';
+    return 'diff';
+  }catch(e){
+    syncMeta.lastError=(e&&e.name==='AbortError')?'请求超时':((e&&e.message)||'网络错误');
+    persistSyncCfg();
+    return 'error';
+  }finally{syncBusy=false;updateSyncBadge();}
+}
+function applyRemote(env){
+  if(!env||!env.data||!Array.isArray(env.data.series))return false;
+  const d=env.data;
+  state=d;
+  state.notes.forEach(n=>{if(typeof n.url==='undefined')n.url='';});
+  if(!Array.isArray(state.readlater))state.readlater=[];
+  state.series.forEach(s=>{if(typeof s.parentId==='undefined')s.parentId=null;});
+  normalizeSeriesOrder();normalizeTaskOrder();
+  save();
+  syncDirty=false;
+  syncTimer&&clearTimeout(syncTimer);syncTimer=null;
+  syncMeta.version=env.version||'';syncMeta.savedAt=env.savedAt||Date.now();syncMeta.lastError='';
+  persistSyncCfg();updateSyncBadge();render();
+  return true;
+}
+function schedulePush(){
+  if(!syncCfg)return;
+  syncTimer&&clearTimeout(syncTimer);
+  syncTimer=setTimeout(()=>{
+    syncTimer=null;
+    if(!syncCfg||!syncDirty||syncBusy)return;
+    doPush(false).then(r=>{if(r==='conflict')syncConflictDialog();});
+  },2500);
+}
+async function autoSync(){
+  if(!syncCfg)return;
+  const r=await doPull();
+  if(r==='diff'){
+    if(!syncDirty&&syncMeta.version){if(applyRemote(syncPending)){syncPending=null;toast('已从云端更新数据');}}
+    else syncConflictDialog();
+  }else if(r==='same'){updateSyncBadge();}
+  else if(r==='empty'){
+    if(state){syncDirty=true;const pr=await doPush(false);if(pr==='ok')updateSyncBadge();}
+  }
+}
+async function syncInitial(){
+  const r=await doPull();
+  if(r==='empty'){
+    const pr=await doPush(false);
+    toast(pr==='ok'?'云端为空，已上传本机数据':('上传失败：'+(syncMeta.lastError||'未知错误')));
+  }else if(r==='same'){toast('云端与本机一致');}
+  else if(r==='diff'){
+    if(!syncMeta.version){syncConflictDialog();}
+    else if(!syncDirty){if(applyRemote(syncPending)){syncPending=null;toast('已载入云端数据');}}
+    else syncConflictDialog();
+  }else if(r==='error'){toast('拉取失败：'+(syncMeta.lastError||'未知错误'));}
+  updateSyncBadge();
+}
+function syncConflictDialog(){
+  const p=syncPending;
+  const when=p&&p.savedAt?new Date(p.savedAt).toLocaleString():'未知时间';
+  openModal(`<div class="modal" style="max-width:460px">
+    <div class="modal-head"><h3>同步冲突</h3><button class="icon-btn" onclick="closeModal()">${ICONS.del}</button></div>
+    <div class="modal-body">
+      <div style="font-size:14px;color:var(--ink-2);line-height:1.8">云端有一份不同的数据（写入时间：${esc(when)}），本机这边也有内容。需要你决定保留哪一边：</div>
+      <div class="modal-foot" style="flex-wrap:wrap;gap:8px">
+        <button class="btn ghost" onclick="syncConflictKeepLocal()">保留本机，覆盖云端</button>
+        <button class="btn" onclick="syncConflictUseRemote()">采用云端数据</button>
+      </div>
+    </div>
+  </div>`);
+}
+function syncConflictKeepLocal(){
+  closeModal();
+  doPush(true).then(r=>{
+    syncPending=null;
+    if(r==='ok')toast('已用本机数据覆盖云端');
+    else toast('覆盖失败：'+(syncMeta.lastError||'未知错误'));
+  });
+}
+function syncConflictUseRemote(){
+  const p=syncPending;syncPending=null;
+  closeModal();
+  if(applyRemote(p))toast('已采用云端数据');
+}
+function openSyncModal(){
+  const c=syncCfg||{endpoint:'',token:''};
+  openModal(`<div class="modal" style="max-width:520px">
+    <div class="modal-head"><h3>云同步</h3><button class="icon-btn" onclick="closeModal()">${ICONS.del}</button></div>
+    <div class="modal-body">
+      <div class="field"><label>Worker 地址</label><input class="input" id="sy-url" placeholder="https://idea-sync.你的子域.workers.dev" value="${esc(c.endpoint||'')}"></div>
+      <div class="field"><label>同步口令</label><input class="input" id="sy-token" type="password" placeholder="与 Worker 的 SYNC_TOKEN 一致" value="${esc(c.token||'')}"></div>
+      <div style="font-size:12.5px;color:var(--muted);line-height:1.75;margin-top:6px">只同步文字数据，图片仍留在本机浏览器里，换设备后图片不会跟着走。改动后会自动上传（约 2.5 秒内），另有每 60 秒的兜底检查。</div>
+      <div style="font-size:12.5px;line-height:1.7;margin-top:10px">状态：${syncStatusText()}</div>
+      <div class="modal-foot" style="flex-wrap:wrap;gap:8px">
+        <button class="btn ghost" onclick="syncClear()">清除配置</button>
+        <button class="btn ghost" onclick="syncPullNow()">从云端拉取</button>
+        <button class="btn ghost" onclick="syncPushNow()">立即上传</button>
+        <button class="btn" onclick="syncSaveForm()">保存并同步</button>
+      </div>
+    </div>
+  </div>`);
+}
+function syncSaveForm(){
+  const url=normSyncUrl($('#sy-url').value),tok=($('#sy-token').value||'').trim();
+  if(!url){toast('请填写 Worker 地址');return;}
+  if(!/^https?:\/\//i.test(url)){toast('地址格式不对，应为 https://…');return;}
+  const changed=!syncCfg||syncCfg.endpoint!==url;
+  syncCfg={endpoint:url,token:tok};
+  if(changed)syncMeta.version='';
+  persistSyncCfg();updateSyncBadge();closeModal();
+  toast('配置已保存，正在同步…');
+  syncInitial();
+}
+async function syncPullNow(){
+  const r=await doPull();
+  if(r==='diff'){syncConflictDialog();return;}
+  if(r==='same'){toast('云端与本机一致');}
+  else if(r==='empty'){toast('云端还没有数据');}
+  else{toast('拉取失败：'+(syncMeta.lastError||'未知错误'));}
+}
+async function syncPushNow(){
+  const r=await doPush(false);
+  if(r==='ok')toast('已上传到云端');
+  else if(r==='conflict')syncConflictDialog();
+  else{toast('上传失败：'+(syncMeta.lastError||'未知错误'));}
+}
+function syncClear(){
+  try{localStorage.removeItem(SYNC_KEY);}catch(e){}
+  syncCfg=null;syncDirty=false;syncPending=null;syncTimer&&clearTimeout(syncTimer);syncTimer=null;
+  syncMeta={version:'',savedAt:0,lastError:''};
+  updateSyncBadge();closeModal();toast('已清除云同步配置');
+}
+
 /* ===== 初始化 ===== */
 let savedTheme=null;try{savedTheme=localStorage.getItem('idea-studio-theme');}catch(e){}
 applyTheme(savedTheme||(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'));
 initEvents();
 render();
+syncCfg=loadSyncCfg();
+updateSyncBadge();
+if(syncCfg)setTimeout(()=>{autoSync();},1500);
+setInterval(()=>{
+  if(!syncCfg||!syncDirty||syncBusy)return;
+  doPush(false).then(r=>{if(r==='conflict')syncConflictDialog();});
+},60000);
 window.addEventListener('resize',()=>{if(window.innerWidth>719)closeSidebar();});
 </script>
 </body>

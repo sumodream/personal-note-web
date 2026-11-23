@@ -1,0 +1,12 @@
+name = "idea-studio-sync"
+main = "worker.js"
+compatibility_date = "2024-11-01"
+
+# R2 存储桶：先在控制台或命令行创建同名桶
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "idea-studio"
+
+[vars]
+OBJECT_KEY = "state.json"
+# SYNC_TOKEN 不要写在这里，用 wrangler secret put SYNC_TOKEN 注入
