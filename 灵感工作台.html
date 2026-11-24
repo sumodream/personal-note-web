@@ -142,6 +142,34 @@ svg{display:block}
 .search-box input{border:none;outline:none;background:none;width:100%;font-size:16px}
 .today{font-size:13px;color:var(--muted);white-space:nowrap;display:flex;align-items:center;gap:7px}
 .today b{color:var(--ink);font-weight:600}
+/* ===== 到期提醒 ===== */
+#remind-btn{position:relative;flex:0 0 30px;margin-left:6px}
+#remind-btn svg{width:17px;height:17px}
+#remind-btn:hover{color:var(--accent)}
+.rem-dot{
+  position:absolute;top:-3px;right:-4px;min-width:15px;height:15px;padding:0 4px;border-radius:8px;
+  background:var(--danger);color:#fff;font-size:10.5px;font-weight:700;line-height:15px;text-align:center;
+  box-shadow:0 0 0 1.5px var(--card);font-variant-numeric:tabular-nums;
+}
+.rem-dot.hide{display:none}
+.rem-list{max-height:min(52vh,420px);overflow:auto;padding:2px;margin:0 -2px}
+.rem-item{
+  display:flex;align-items:center;gap:9px;padding:9px 10px;border:1px solid var(--line);
+  border-radius:10px;background:var(--card);margin-bottom:8px;cursor:pointer;
+  transition:border-color .15s,box-shadow .15s,opacity .15s;
+}
+.rem-item:hover{border-color:var(--line-strong)}
+.rem-item.dragging{opacity:.45}
+.rem-item.drag-over{border-color:var(--accent);box-shadow:0 0 0 3px var(--focus-ring)}
+.rem-item.stale{opacity:.6}
+.rem-item .g-grip{display:flex;color:var(--faint);cursor:grab;flex:0 0 auto}
+.rem-item .g-grip svg{width:15px;height:15px}
+.rem-unread{width:7px;height:7px;border-radius:50%;background:var(--danger);flex:0 0 7px}
+.rem-unread.read{background:var(--line-strong)}
+.rem-main{flex:1;min-width:0}
+.rem-name{font-size:13.5px;font-weight:600;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rem-meta{font-size:11.5px;color:var(--muted);margin-top:3px;display:flex;gap:7px;flex-wrap:wrap;align-items:center}
+.rem-item .icon-btn{flex:0 0 auto;width:26px;height:26px}
 .menu-toggle{display:none}
 .btn{
   display:inline-flex;align-items:center;justify-content:center;gap:7px;
@@ -514,6 +542,10 @@ mark{background:var(--mark-bg);color:inherit;border-radius:2px;padding:0 1px}
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
         <input id="global-search" type="text" placeholder="搜索灵感、笔记、网址…" autocomplete="off">
       </div>
+      <button class="icon-btn" id="remind-btn" title="到期提醒" onclick="openRemindPanel()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8.5a6 6 0 1 0-12 0c0 5.5-2 7-2 7h16s-2-1.5-2-7"/><path d="M13.7 19.5a2.1 2.1 0 0 1-3.4 0"/></svg>
+        <span class="rem-dot hide" id="rem-dot">0</span>
+      </button>
       <span class="today" id="today"></span>
     </header>
     <main class="view" id="view"></main>
@@ -661,7 +693,8 @@ const ICONS={
   inbox:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.5 5h13l3.5 7v5a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-5z"/></svg>',
   img:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>',
   grip:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="9" cy="6" r="1.3"/><circle cx="15" cy="6" r="1.3"/><circle cx="9" cy="12" r="1.3"/><circle cx="15" cy="12" r="1.3"/><circle cx="9" cy="18" r="1.3"/><circle cx="15" cy="18" r="1.3"/></svg>',
-  cloud:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 18.5a4.3 4.3 0 0 1 .3-8.6A5.4 5.4 0 0 1 17.7 12a3.3 3.3 0 0 1-1 6.5z"/><path d="M12 20v-5m0 0-2.4 2.4M12 15l2.4 2.4"/></svg>'
+  cloud:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 18.5a4.3 4.3 0 0 1 .3-8.6A5.4 5.4 0 0 1 17.7 12a3.3 3.3 0 0 1-1 6.5z"/><path d="M12 20v-5m0 0-2.4 2.4M12 15l2.4 2.4"/></svg>',
+  bell:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8.5a6 6 0 1 0-12 0c0 5.5-2 7-2 7h16s-2-1.5-2-7"/><path d="M13.7 19.5a2.1 2.1 0 0 1-3.4 0"/></svg>'
 };
 
 /* ===== 数据与存储 ===== */
@@ -704,6 +737,8 @@ function seedData(){
       {id:uid(),url:'https://github.com/trending',title:'GitHub 热门仓库',excerpt:'每天快速扫一眼行业热点与新项目。',seriesId:s1,createdAt:now-7*D}
     ],
     readlater:[],
+    reminders:[],
+    remindMuted:[],
     tasks:[
       {id:uid(),name:'搭建工作台网站',seriesId:s1,start:d(-10),end:d(6),progress:60,note:'记录 Idea 与笔记',createdAt:now-10*D},
       {id:uid(),name:'读完《设计心理学》',seriesId:s2,start:d(-4),end:d(12),progress:35,note:'每周两章',createdAt:now-6*D},
@@ -719,6 +754,8 @@ function load(){
     d.series.forEach(s=>{if(typeof s.parentId==='undefined')s.parentId=null;});
     d.notes.forEach(n=>{if(typeof n.url==='undefined')n.url='';});
     if(!Array.isArray(d.readlater))d.readlater=[];
+    if(!Array.isArray(d.reminders))d.reminders=[];
+    if(!Array.isArray(d.remindMuted))d.remindMuted=[];
     return d;}catch(e){return null;}
 }
 const UNDO_LIMIT=50;
@@ -855,6 +892,149 @@ function taskDaysLeft(t){
   return {s,e,today,left:Math.round((e-today)/D),started:today>=s,finished:today>e};
 }
 
+/* ===== 到期提醒（仅页面内） ===== */
+function reminderKey(taskId,due){return taskId+'|'+due;}
+function taskDueToday(t){
+  if(!t)return '';
+  const td=todayStr();
+  if(t.repeat)return isOccurrence(t.repeat,parseDay(td))?td:'';
+  return t.end===td?td:'';
+}
+function reminderStale(r){return !!r&&!!r.due&&r.due<todayStr();}
+function muteReminder(r){
+  if(!r)return;
+  if(!Array.isArray(state.remindMuted))state.remindMuted=[];
+  const key=reminderKey(r.taskId,r.due);
+  if(state.remindMuted.indexOf(key)<0)state.remindMuted.push(key);
+  if(state.remindMuted.length>500)state.remindMuted=state.remindMuted.slice(-500);
+}
+function syncReminders(){
+  if(!state||!Array.isArray(state.reminders))return false;
+  if(!Array.isArray(state.remindMuted))state.remindMuted=[];
+  let added=false;
+  state.tasks.forEach(t=>{
+    const due=taskDueToday(t);
+    if(!due)return;
+    const key=reminderKey(t.id,due);
+    if(state.reminders.some(r=>reminderKey(r.taskId,r.due)===key))return;
+    if(state.remindMuted.indexOf(key)>=0)return;
+    state.reminders.push({id:uid(),taskId:t.id,name:t.name,due:due,createdAt:Date.now(),seen:false});
+    added=true;
+  });
+  state.reminders.forEach(r=>{
+    const t=state.tasks.find(x=>x.id===r.taskId);
+    if(t&&t.name!==r.name){r.name=t.name;added=true;}
+  });
+  return added;
+}
+function reminderUnreadCount(){
+  if(!state||!Array.isArray(state.reminders))return 0;
+  return state.reminders.filter(r=>!r.seen&&!reminderStale(r)).length;
+}
+function updateRemindBadge(){
+  const dot=$('#rem-dot'),btn=$('#remind-btn');
+  const n=reminderUnreadCount();
+  if(dot){dot.classList.toggle('hide',n<=0);dot.textContent=n>99?'99+':String(n);}
+  if(btn)btn.title=n>0?('到期提醒 · '+n+' 条未读'):'到期提醒';
+}
+function refreshReminders(){
+  if(!state||!Array.isArray(state.reminders))return;
+  if(syncReminders())save();
+  updateRemindBadge();
+}
+function remindListHTML(){
+  if(!state.reminders.length)return '<div class="empty" style="padding:30px 16px"><div class="t">还没有提醒记录</div><div class="d">今天的到期任务会自动出现在这里</div></div>';
+  const td=todayStr();
+  return state.reminders.map(r=>{
+    const stale=reminderStale(r);
+    const diff=stale?Math.round((parseDay(td)-parseDay(r.due))/D):0;
+    const tag=stale?('<span class="pill">已过期 '+diff+' 天</span>'):'<span class="pill ok">今天到期</span>';
+    return '<div class="rem-item'+(stale?' stale':'')+'" data-rem="'+r.id+'" draggable="true"'
+      +' ondragstart="remDragStart(event,\''+r.id+'\')" ondragover="remDragOver(event,\''+r.id+'\')"'
+      +' ondragleave="remDragLeave(event)" ondrop="remDrop(event,\''+r.id+'\')" ondragend="remDragEnd(event)"'
+      +' onclick="if(!remDragSuppress)openReminder(\''+r.id+'\')">'
+      +'<span class="g-grip" title="拖动调整顺序">'+ICONS.grip+'</span>'
+      +'<span class="rem-unread'+(r.seen?' read':'')+'"></span>'
+      +'<div class="rem-main"><div class="rem-name">'+esc(r.name)+'</div>'
+      +'<div class="rem-meta">'+tag+'<span>'+esc(r.due)+'</span>'+(r.seen?'<span>已查看</span>':'')+'</div></div>'
+      +'<button class="icon-btn" title="删除这条提醒" onclick="event.stopPropagation();delReminder(\''+r.id+'\')">'+ICONS.del+'</button>'
+      +'</div>';
+  }).join('');
+}
+function openRemindPanel(){
+  refreshReminders();
+  const n=reminderUnreadCount();
+  openModal('<div class="modal" style="max-width:520px">'
+    +'<div class="modal-head"><h3>到期提醒</h3>'
+    +'<div style="margin-left:auto;display:flex;align-items:center;gap:6px">'
+    +'<button class="btn ghost xs" onclick="clearReminders()">清空</button>'
+    +'<button class="icon-btn" onclick="closeModal()">'+ICONS.del+'</button></div></div>'
+    +'<div class="modal-body">'
+    +'<div style="font-size:12.5px;color:var(--muted);line-height:1.75;margin-bottom:12px">'
+    +(n>0?'当前有 <b style="color:var(--danger)">'+n+'</b> 条未读。':'')
+    +'只有今天到期的任务会亮红点；点开某条详情即视为已查看，条目保留但不再提醒；已过期的条目只留记录、不参与计数。</div>'
+    +'<div class="rem-list">'+remindListHTML()+'</div>'
+    +'<div class="modal-foot"><button class="btn ghost" onclick="closeModal()">关闭</button></div>'
+    +'</div></div>');
+}
+let remDragId=null,remDragSuppress=false;
+function remDragStart(e,id){
+  remDragId=id;remDragSuppress=false;
+  if(e.currentTarget)e.currentTarget.classList.add('dragging');
+  if(e.dataTransfer){e.dataTransfer.effectAllowed='move';try{e.dataTransfer.setData('text/plain',id);}catch(_){}}
+}
+function remDragOver(e,id){
+  if(!remDragId||remDragId===id)return;
+  e.preventDefault();
+  if(e.dataTransfer)e.dataTransfer.dropEffect='move';
+  $$('.rem-item.drag-over').forEach(x=>x.classList.remove('drag-over'));
+  if(e.currentTarget)e.currentTarget.classList.add('drag-over');
+}
+function remDragLeave(e){if(e.currentTarget)e.currentTarget.classList.remove('drag-over');}
+function remDragEnd(e){
+  remDragId=null;
+  if(e.currentTarget)e.currentTarget.classList.remove('dragging');
+  $$('.rem-item.drag-over').forEach(x=>x.classList.remove('drag-over'));
+}
+function remDrop(e,id){
+  e.preventDefault();
+  const from=state.reminders.findIndex(r=>r.id===remDragId);
+  const to=state.reminders.findIndex(r=>r.id===id);
+  remDragId=null;remDragSuppress=true;
+  setTimeout(()=>{remDragSuppress=false;},300);
+  if(from<0||to<0||from===to){openRemindPanel();return;}
+  const moved=state.reminders.splice(from,1)[0];
+  state.reminders.splice(to,0,moved);
+  save();updateRemindBadge();openRemindPanel();toast('提醒顺序已更新');
+}
+function openReminder(id){
+  const r=state.reminders.find(x=>x.id===id);if(!r)return;
+  if(!r.seen){r.seen=true;save();}
+  updateRemindBadge();
+  const t=state.tasks.find(x=>x.id===r.taskId);
+  closeModal();
+  if(t){navigate('#/gantt');openTaskModal(t.id);toast('已标记为已查看');}
+  else{toast('对应任务已被删除');openRemindPanel();}
+}
+function delReminder(id){
+  const i=state.reminders.findIndex(r=>r.id===id);if(i<0)return;
+  muteReminder(state.reminders[i]);
+  state.reminders.splice(i,1);
+  save();updateRemindBadge();
+  toast('已删除这条提醒');
+  openRemindPanel();
+}
+function clearReminders(){
+  if(!state.reminders.length){toast('没有可清空的提醒');return;}
+  confirmDialog('清空全部提醒记录？当天不再重复提醒，日后新到期的任务仍会重新提醒。',()=>{
+    state.reminders.forEach(r=>muteReminder(r));
+    state.reminders=[];
+    save();updateRemindBadge();
+    toast('已清空提醒记录');
+    openRemindPanel();
+  });
+}
+
 /* ===== UI 帮助函数 ===== */
 function toast(msg){
   const root=$('#toast-root');
@@ -963,6 +1143,7 @@ function afterRender(){
   const d=new Date();
   const week=['日','一','二','三','四','五','六'][d.getDay()];
   today.innerHTML='<span class="full">'+d.getFullYear()+'年'+(d.getMonth()+1)+'月'+d.getDate()+'日 · 周'+week+'</span><b>'+((d.getMonth()+1)+'/'+d.getDate())+'</b>';
+  refreshReminders();
   // 搜索页不需要在这里再次触发渲染：syncSearch 仅绑定到搜索框的 input 事件
   initFolds();
   hydrateAssets();
@@ -2108,6 +2289,8 @@ function initEvents(){
             state=d;
             state.notes.forEach(n=>{if(typeof n.url==='undefined')n.url='';});
             if(!Array.isArray(state.readlater))state.readlater=[];
+            if(!Array.isArray(state.reminders))state.reminders=[];
+            if(!Array.isArray(state.remindMuted))state.remindMuted=[];
             state.series.forEach(s=>{if(typeof s.parentId==='undefined')s.parentId=null;});
             normalizeSeriesOrder();
             normalizeTaskOrder();
@@ -2356,6 +2539,8 @@ function applyRemote(env){
   state=d;
   state.notes.forEach(n=>{if(typeof n.url==='undefined')n.url='';});
   if(!Array.isArray(state.readlater))state.readlater=[];
+  if(!Array.isArray(state.reminders))state.reminders=[];
+  if(!Array.isArray(state.remindMuted))state.remindMuted=[];
   state.series.forEach(s=>{if(typeof s.parentId==='undefined')s.parentId=null;});
   normalizeSeriesOrder();normalizeTaskOrder();
   save();
@@ -2519,6 +2704,8 @@ setInterval(()=>{
   if(!syncCfg||!syncDirty||syncBusy)return;
   doPush(false).then(r=>{if(r==='conflict')syncConflictDialog();});
 },60000);
+refreshReminders();
+setInterval(()=>{refreshReminders();},60000);
 window.addEventListener('resize',()=>{if(window.innerWidth>719)closeSidebar();});
 </script>
 </body>
